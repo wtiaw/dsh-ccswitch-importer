@@ -53,3 +53,16 @@ test('empty or non-toml input yields empty result', () => {
   assert.deepEqual(parseCodexToml(''), { model: undefined, provider: null })
   assert.deepEqual(parseCodexToml('not toml at all'), { model: undefined, provider: null })
 })
+
+test('strips inline comments after values', () => {
+  const result = parseCodexToml(`model = "x" # top-level note
+[model_providers.custom]
+name = "n" # provider name
+base_url = "http://localhost:8080/v1" # endpoint
+requires_openai_auth = true # flag
+`)
+  assert.deepEqual(result, {
+    model: 'x',
+    provider: { name: 'n', baseUrl: 'http://localhost:8080/v1', wireApi: undefined, requiresOpenaiAuth: true },
+  })
+})
