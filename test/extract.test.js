@@ -80,3 +80,30 @@ test('codex-official and default are skipped outright', () => {
   const fallback = extractProfile({ id: 'default', name: 'default', settings_config: '{}' })
   assert.equal(fallback.skipped, true)
 })
+
+test('warns when requires_openai_auth is set', () => {
+  const row = {
+    id: 'p5',
+    name: 'P5',
+    settings_config: JSON.stringify({
+      auth: { OPENAI_API_KEY: 'k' },
+      config: `model = "m"\n[model_providers.custom]\nname = "p"\nbase_url = "https://x/v1"\nwire_api = "responses"\nrequires_openai_auth = true\n`,
+    }),
+  }
+  const profile = extractProfile(row)
+  assert.deepEqual(profile.warnings, ['provider 标记 requires_openai_auth，导入后可能仍无法通过 API key 认证'])
+})
+
+test('blocked profile never carries the api key', () => {
+  const row = {
+    id: 'p6',
+    name: 'P6',
+    settings_config: JSON.stringify({
+      auth: { OPENAI_API_KEY: 'sk-secret-value' },
+      config: 'model = "m"\n', // no [model_providers.custom] section
+    }),
+  }
+  const profile = extractProfile(row)
+  assert.ok(profile.blocked)
+  assert.equal(profile.apiKey, undefined)
+})
