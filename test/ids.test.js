@@ -26,6 +26,11 @@ test('credentialRefFor derives from a provider key', () => {
   assert.equal(credentialRefFor(key), credentialRef('星渡-1786264467316', '星渡'))
 })
 
+test('credentialRefFor rejects non-8-hex tails (e.g. variant keys)', () => {
+  assert.throws(() => credentialRefFor('ccs-provider-abcdef12-3456'), /8-hex/)
+  assert.throws(() => credentialRefFor('ccs-provider-nohash'), /8-hex/)
+})
+
 test('variantKey appends a deterministic suffix', () => {
   const base = providerKey('p-1', 'P')
   const v1 = variantKey(base, 1)
