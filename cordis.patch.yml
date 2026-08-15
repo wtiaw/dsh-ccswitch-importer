@@ -1,0 +1,6 @@
+# dsh-ccswitch-importer bundle patch: mounts the dual-face plugin row.
+# The node half (exports ".") runs in the host process (SQLite scan, /api/dsh-ccswitch routes),
+# and the dsh.client declaration makes the browser half (exports "./client") load in the web GUI.
+- insert:
+    - id: ccswitch-importer
+      name: dsh-ccswitch-importer

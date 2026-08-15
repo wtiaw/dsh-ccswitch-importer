@@ -1,0 +1,27 @@
+{
+  "name": "dsh-ccswitch-importer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Import CC Switch Codex API-key provider profiles into DSH's llm-pi-ai registry.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
+}
