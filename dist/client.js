@@ -316,6 +316,11 @@ window.__ModuleLoader__.load({
 		// src/ui/ReasoningSettingsSection.mjs
 		var import_react = __toESM(require("react"), 1);
 		var h = import_react.default.createElement;
+		function displayStatus(status) {
+		  if (status === "saving") return "\u4FDD\u5B58\u4E2D\u2026";
+		  if (status === "saved") return "\u5DF2\u4FDD\u5B58";
+		  return status;
+		}
 		function ModelEditor({ route, model, controller, writable }) {
 		  const initial = (0, import_react.useMemo)(() => {
 		    if (model.reasoningEfforts === false) return { mode: "disabled", efforts: {} };
@@ -328,6 +333,7 @@ window.__ModuleLoader__.load({
 		  const [mode, setMode] = (0, import_react.useState)(initial.mode);
 		  const [efforts, setEfforts] = (0, import_react.useState)(initial.efforts);
 		  const [status, setStatus] = (0, import_react.useState)("");
+		  const [customOpen, setCustomOpen] = (0, import_react.useState)(false);
 		  const toggleLevel = (level, checked) => {
 		    setEfforts((current) => {
 		      const next = { ...current };
@@ -345,29 +351,48 @@ window.__ModuleLoader__.load({
 		      setStatus(error instanceof Error ? error.message : String(error));
 		    }
 		  };
+		  const modelName = model.name || model.id;
 		  return h(
-		    "div",
+		    "article",
 		    { className: "dsh-reasoning-model" },
 		    h(
 		      "div",
-		      { className: "dsh-reasoning-model__header" },
-		      h("strong", null, model.name || model.id),
-		      h("code", null, model.id),
+		      { className: "dsh-reasoning-model__top" },
 		      h(
-		        "select",
-		        {
-		          value: mode,
-		          disabled: !writable,
-		          onChange: (event) => setMode(event.target.value),
-		          "aria-label": `${model.id} reasoning mode`
-		        },
-		        h("option", { value: "disabled" }, "Disabled"),
-		        h("option", { value: "enabled" }, "Enabled")
+		        "div",
+		        { className: "dsh-reasoning-model__identity" },
+		        h("strong", null, modelName),
+		        model.id !== modelName && h("code", null, model.id)
+		      ),
+		      h(
+		        "div",
+		        { className: "dsh-reasoning-model__actions" },
+		        h(
+		          "div",
+		          { className: "dsh-reasoning-mode", role: "group", "aria-label": `${model.id} \u63A8\u7406\u6A21\u5F0F` },
+		          h("button", {
+		            type: "button",
+		            className: mode === "disabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
+		            "aria-pressed": mode === "disabled",
+		            disabled: !writable,
+		            onClick: () => setMode("disabled")
+		          }, "\u5173\u95ED"),
+		          h("button", {
+		            type: "button",
+		            className: mode === "enabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
+		            "aria-pressed": mode === "enabled",
+		            disabled: !writable,
+		            onClick: () => setMode("enabled")
+		          }, "\u542F\u7528")
+		        ),
+		        h("button", { className: "dsh-reasoning-save", type: "button", disabled: !writable || status === "saving", onClick: save }, status === "saving" ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58"),
+		        status && status !== "saving" && h("span", { role: "status", className: status === "saved" ? "dsh-reasoning-status dsh-reasoning-status--success" : "dsh-reasoning-status dsh-reasoning-status--error" }, displayStatus(status))
 		      )
 		    ),
 		    mode === "enabled" && h(
 		      "div",
-		      { className: "dsh-reasoning-levels" },
+		      { className: "dsh-reasoning-levels", "aria-label": `${model.id} \u53EF\u7528\u63A8\u7406\u7B49\u7EA7` },
+		      h("span", { className: "dsh-reasoning-levels__label" }, "\u53EF\u7528\u7B49\u7EA7"),
 		      ...LEVELS.map((level) => h(
 		        "label",
 		        { key: level, className: "dsh-reasoning-level" },
@@ -377,22 +402,40 @@ window.__ModuleLoader__.load({
 		          disabled: !writable,
 		          onChange: (event) => toggleLevel(level, event.target.checked)
 		        }),
-		        h("span", null, level),
-		        h("input", {
-		          type: "text",
-		          value: efforts[level] ?? "",
-		          placeholder: level === "off" ? "omit or none" : level,
-		          disabled: !writable || !Object.hasOwn(efforts, level),
-		          onChange: (event) => setEfforts((current) => ({ ...current, [level]: event.target.value })),
-		          "aria-label": `${model.id} ${level} wire value`
-		        })
+		        h("span", null, level)
 		      ))
 		    ),
-		    h(
+		    mode === "enabled" && h(
 		      "div",
-		      { className: "dsh-reasoning-model__actions" },
-		      h("button", { type: "button", disabled: !writable || status === "saving", onClick: save }, status === "saving" ? "Saving..." : "Save"),
-		      status && status !== "saving" && h("span", { role: "status" }, status)
+		      { className: "dsh-reasoning-custom" },
+		      h(
+		        "button",
+		        {
+		          type: "button",
+		          className: "dsh-reasoning-custom__toggle",
+		          "aria-expanded": customOpen,
+		          onClick: () => setCustomOpen((current) => !current)
+		        },
+		        customOpen ? "\u6536\u8D77\u81EA\u5B9A\u4E49\u6620\u5C04" : "\u81EA\u5B9A\u4E49 wire \u503C",
+		        h("span", { "aria-hidden": "true" }, customOpen ? "\u2303" : "\u2304")
+		      ),
+		      customOpen && h(
+		        "div",
+		        { className: "dsh-reasoning-custom__body" },
+		        ...LEVELS.filter((level) => Object.hasOwn(efforts, level)).map((level) => h(
+		          "label",
+		          { key: level, className: "dsh-reasoning-custom__field" },
+		          h("span", null, level === "off" ? "off" : level),
+		          h("input", {
+		            type: "text",
+		            value: efforts[level] ?? "",
+		            placeholder: level === "off" ? "\u7559\u7A7A\u8868\u793A null" : level,
+		            disabled: !writable,
+		            onChange: (event) => setEfforts((current) => ({ ...current, [level]: event.target.value })),
+		            "aria-label": `${model.id} ${level} wire \u503C`
+		          })
+		        ))
+		      )
 		    )
 		  );
 		}
@@ -400,14 +443,23 @@ window.__ModuleLoader__.load({
 		  return h(
 		    "section",
 		    { key: route, className: "dsh-reasoning-provider" },
-		    h("h3", null, route),
-		    ...provider.models.map((model) => h(ModelEditor, {
-		      key: model.id,
-		      route,
-		      model,
-		      controller,
-		      writable
-		    }))
+		    h(
+		      "div",
+		      { className: "dsh-reasoning-provider__header" },
+		      h("h3", null, route),
+		      h("span", null, `${provider.models.length} \u4E2A\u6A21\u578B`)
+		    ),
+		    h(
+		      "div",
+		      { className: "dsh-reasoning-provider__models" },
+		      ...provider.models.map((model) => h(ModelEditor, {
+		        key: model.id,
+		        route,
+		        model,
+		        controller,
+		        writable
+		      }))
+		    )
 		  );
 		}
 		function ReasoningSettingsSection({ controller, embedded = false }) {
@@ -416,7 +468,7 @@ window.__ModuleLoader__.load({
 		  (0, import_react.useEffect)(() => {
 		    if (snapshot.status === "idle") void controller.refresh();
 		  }, [controller, snapshot.status]);
-		  if (snapshot.status === "loading" && providers.length === 0) return h("p", null, "Loading model reasoning settings...");
+		  if (snapshot.status === "loading" && providers.length === 0) return h("p", null, "\u6B63\u5728\u52A0\u8F7D\u6A21\u578B\u63A8\u7406\u8BBE\u7F6E\u2026");
 		  if (snapshot.status === "error") return h("p", { role: "alert" }, snapshot.error);
 		  return h(
 		    "section",
@@ -424,10 +476,10 @@ window.__ModuleLoader__.load({
 		    !embedded && h(
 		      "header",
 		      null,
-		      h("h2", null, "Model reasoning"),
-		      h("p", null, "Configure reasoning levels for custom provider models.")
+		      h("h2", null, "\u6A21\u578B\u63A8\u7406"),
+		      h("p", null, "\u4E3A\u81EA\u5B9A\u4E49 provider \u7684\u6BCF\u4E2A\u6A21\u578B\u8BBE\u7F6E\u63A8\u7406\u7B49\u7EA7\u3002")
 		    ),
-		    providers.length === 0 ? h("p", null, "No custom provider models found.") : providers.map((entry) => renderProvider(entry, controller, snapshot.writable))
+		    providers.length === 0 ? h("p", null, "\u6682\u65E0\u81EA\u5B9A\u4E49 provider \u6A21\u578B\u3002") : providers.map((entry) => renderProvider(entry, controller, snapshot.writable))
 		  );
 		}
 
@@ -469,11 +521,11 @@ window.__ModuleLoader__.load({
 		      h2(
 		        "div",
 		        { className: "dsh-ccswitch-import__actions" },
-		        h2("button", { type: "button", disabled: busy, onClick: () => {
+		        h2("button", { className: "dsh-ccswitch-import__secondary", type: "button", disabled: busy, onClick: () => {
 		          void controller.scan().catch(() => {
 		          });
 		        } }, busy ? "\u5904\u7406\u4E2D..." : "\u626B\u63CF"),
-		        h2("button", { type: "button", disabled: busy || selected.size === 0, onClick: () => {
+		        h2("button", { className: "dsh-ccswitch-import__primary", type: "button", disabled: busy || selected.size === 0, onClick: () => {
 		          void controller.importSelected().catch(() => {
 		          });
 		        } }, "\u5BFC\u5165\u9009\u4E2D")
@@ -552,7 +604,7 @@ window.__ModuleLoader__.load({
 
 		// src/client/styles.mjs
 		var STYLE_ID = "dsh-ccswitch-importer-styles";
-		var CSS = 'button[class*="navCell"]:has(span[class*="navLabel"]:empty){display:none;}\n.dsh-reasoning-composite{display:flex;flex-direction:column;gap:20px;}\n.dsh-reasoning-embed{border-top:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.1));padding-top:16px;}\n.dsh-reasoning-embed__title{margin:0 0 4px;font-size:16px;font-weight:600;color:var(--dsw-alias-label-primary,inherit);}\n.dsh-reasoning-embed__hint{margin:0 0 14px;font-size:13px;color:var(--dsw-alias-label-secondary,#666);}\n.dsh-reasoning-settings{display:flex;flex-direction:column;gap:14px;}\n.dsh-reasoning-provider{border:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.1));border-radius:10px;padding:14px;background:var(--dsw-alias-surface-secondary,transparent);}\n.dsh-reasoning-provider h3{margin:0 0 10px;font-size:14px;font-weight:600;color:var(--dsw-alias-label-primary,inherit);}\n.dsh-reasoning-model{padding:12px 0;border-top:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.08));}\n.dsh-reasoning-model:first-child{border-top:0;padding-top:0;}\n.dsh-reasoning-model__header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}\n.dsh-reasoning-model__header strong{font-size:13px;font-weight:600;}\n.dsh-reasoning-model__header code{font-size:11px;color:var(--dsw-alias-label-secondary,#666);background:var(--dsw-alias-surface-tertiary,rgba(0,0,0,.05));padding:2px 6px;border-radius:4px;}\n.dsh-reasoning-model__header select{margin-left:auto;padding:4px 8px;border:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.15));border-radius:6px;background:var(--dsw-alias-surface-primary,#fff);color:var(--dsw-alias-label-primary,inherit);}\n.dsh-reasoning-levels{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}\n.dsh-reasoning-level{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.12));border-radius:8px;font-size:12px;color:var(--dsw-alias-label-primary,inherit);}\n.dsh-reasoning-level input[type=text]{width:96px;padding:3px 6px;border:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.15));border-radius:5px;background:var(--dsw-alias-surface-primary,#fff);color:var(--dsw-alias-label-primary,inherit);}\n.dsh-reasoning-model__actions{display:flex;align-items:center;gap:10px;}\n.dsh-reasoning-model__actions button{padding:5px 12px;border:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.15));border-radius:6px;background:var(--dsw-alias-surface-primary,#fff);color:var(--dsw-alias-label-primary,inherit);cursor:pointer;}\n.dsh-reasoning-model__actions button:disabled{opacity:.5;cursor:not-allowed;}\n.dsh-reasoning-model__actions span[role=status]{font-size:12px;color:var(--dsw-alias-label-secondary,#666);}\n.dsh-ccswitch-import{border-top:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.1));padding-top:16px;}\n.dsh-ccswitch-import__header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}\n.dsh-ccswitch-import__title{margin:0 0 4px;font-size:16px;font-weight:600;color:var(--dsw-alias-label-primary,inherit);}\n.dsh-ccswitch-import__hint,.dsh-ccswitch-import__empty{margin:0 0 12px;font-size:13px;color:var(--dsw-alias-label-secondary,#666);}\n.dsh-ccswitch-import__actions{display:flex;gap:8px;flex-wrap:wrap;}\n.dsh-ccswitch-import__actions button{padding:6px 12px;border:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.15));border-radius:6px;background:var(--dsw-alias-surface-primary,#fff);color:var(--dsw-alias-label-primary,inherit);cursor:pointer;}\n.dsh-ccswitch-import__actions button:disabled{opacity:.5;cursor:not-allowed;}\n.dsh-ccswitch-import__list{display:flex;flex-direction:column;gap:8px;}\n.dsh-ccswitch-import__row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px;border:1px solid var(--dsw-alias-line-divider,rgba(0,0,0,.1));border-radius:8px;}\n.dsh-ccswitch-import__row--blocked{opacity:.6;}\n.dsh-ccswitch-import__meta{display:flex;min-width:0;flex-direction:column;gap:3px;}\n.dsh-ccswitch-import__meta strong,.dsh-ccswitch-import__meta code,.dsh-ccswitch-import__meta span{overflow-wrap:anywhere;}\n.dsh-ccswitch-import__meta strong{font-size:13px;}\n.dsh-ccswitch-import__provider-key{font-size:11px;color:var(--dsw-alias-label-secondary,#666);overflow-wrap:anywhere;}\n.dsh-ccswitch-import__warnings{font-size:12px;color:var(--dsw-alias-label-warning,#9a6700);overflow-wrap:anywhere;}\n.dsh-ccswitch-import__meta code{font-size:11px;color:var(--dsw-alias-label-secondary,#666);}\n.dsh-ccswitch-import__meta span{font-size:12px;color:var(--dsw-alias-label-secondary,#666);}\n.dsh-ccswitch-import__status{font-size:12px;color:var(--dsw-alias-label-secondary,#666);white-space:nowrap;}\n.dsh-ccswitch-import__error{margin:0 0 12px;color:var(--dsw-alias-label-danger,#b42318);}\n.dsh-ccswitch-import__results{margin:12px 0 0;padding-left:20px;font-size:12px;}\n@media (max-width:640px){.dsh-ccswitch-import__header{flex-direction:column;}.dsh-ccswitch-import__actions{width:100%;flex-direction:column;align-items:stretch;}.dsh-ccswitch-import__actions button{width:100%;flex:none;}.dsh-ccswitch-import__row{grid-template-columns:auto minmax(0,1fr);}.dsh-ccswitch-import__status{grid-column:2;white-space:normal;}.dsh-reasoning-model__header{align-items:stretch;flex-direction:column;}.dsh-reasoning-model__header select{width:100%;margin-left:0;}.dsh-reasoning-level{width:100%;box-sizing:border-box;}.dsh-reasoning-model__actions{flex-direction:column;align-items:stretch;}.dsh-reasoning-model__actions button{width:100%;}}';
+		var CSS = 'button[class*="navCell"]:has(span[class*="navLabel"]:empty){display:none;}\n.dsh-reasoning-composite{display:flex;flex-direction:column;gap:20px;}\n.dsh-reasoning-embed{border-top:1px solid var(--dsw-alias-border-l2);padding-top:16px;}\n.dsh-reasoning-embed__title{margin:0 0 4px;color:var(--dsw-alias-label-primary);font-size:16px;font-weight:500;line-height:24px;}\n.dsh-reasoning-embed__hint{margin:0 0 14px;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;}\n.dsh-reasoning-settings{display:flex;flex-direction:column;gap:16px;color:var(--dsw-alias-label-primary);}\n.dsh-reasoning-provider{padding:0 0 4px;}\n.dsh-reasoning-provider__header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 0 8px;border-bottom:1px solid var(--dsw-alias-border-l2);}\n.dsh-reasoning-provider__header h3{margin:0;color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;line-height:20px;overflow-wrap:anywhere;}\n.dsh-reasoning-provider__header span{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;white-space:nowrap;}\n.dsh-reasoning-provider__models{display:flex;flex-direction:column;}\n.dsh-reasoning-model{position:relative;padding:12px 0;border-bottom:1px solid var(--dsw-alias-border-l2);}\n.dsh-reasoning-model__top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;}\n.dsh-reasoning-model__identity{display:flex;align-items:baseline;gap:8px;min-width:0;}\n.dsh-reasoning-model__identity strong{min-width:0;color:var(--dsw-alias-label-primary);font-size:14px;font-weight:500;line-height:22px;overflow-wrap:anywhere;}\n.dsh-reasoning-model__identity code{min-width:0;color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code,monospace);font-size:12px;line-height:18px;overflow-wrap:anywhere;}\n.dsh-reasoning-model__actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:none;}\n.dsh-reasoning-mode{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);}\n.dsh-reasoning-mode__option{min-width:38px;height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}\n.dsh-reasoning-mode__option:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}\n.dsh-reasoning-mode__option--active{background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);}\n.dsh-reasoning-mode__option--active:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);color:var(--dsw-alias-label-primary-foreground);}\n.dsh-reasoning-save,.dsh-ccswitch-import__primary{box-sizing:border-box;min-height:28px;padding:0 10px;border:0;border-radius:14px;background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}\n.dsh-reasoning-save:hover:not(:disabled),.dsh-ccswitch-import__primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);}\n.dsh-reasoning-save:disabled,.dsh-ccswitch-import__primary:disabled,.dsh-ccswitch-import__secondary:disabled,.dsh-reasoning-mode__option:disabled{opacity:.4;cursor:default;}\n.dsh-reasoning-save:focus-visible,.dsh-ccswitch-import__primary:focus-visible,.dsh-ccswitch-import__secondary:focus-visible,.dsh-reasoning-mode__option:focus-visible,.dsh-reasoning-custom__toggle:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}\n.dsh-reasoning-status{font-size:12px;line-height:18px;white-space:nowrap;}\n.dsh-reasoning-status--success{color:var(--dsw-alias-state-success-primary);}\n.dsh-reasoning-status--error{max-width:180px;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;}\n.dsh-reasoning-model__mode{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}\n.dsh-reasoning-levels{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:10px 0 0;padding-left:2px;}\n.dsh-reasoning-levels__label{margin-right:2px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:28px;}\n.dsh-reasoning-level{position:relative;display:inline-flex;align-items:center;min-height:28px;padding:0 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;cursor:pointer;}\n.dsh-reasoning-level:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}\n.dsh-reasoning-level:has(input:checked){border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-tertiary);color:var(--dsw-alias-label-primary);}\n.dsh-reasoning-level:has(input:disabled){cursor:default;opacity:.6;}\n.dsh-reasoning-level input{position:absolute;opacity:0;pointer-events:none;}\n.dsh-reasoning-custom{margin:10px 0 0;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l2);}\n.dsh-reasoning-custom__toggle{display:inline-flex;align-items:center;gap:6px;margin-left:-4px;padding:2px 6px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}\n.dsh-reasoning-custom__toggle:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}\n.dsh-reasoning-custom__body{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:10px 0 2px;}\n.dsh-reasoning-custom__field{display:flex;flex-direction:column;gap:4px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;}\n.dsh-reasoning-custom__field input{box-sizing:border-box;width:100%;height:30px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:12px;line-height:18px;}\n.dsh-reasoning-custom__field input:focus{border-color:var(--dsw-alias-brand-primary);outline:none;}\n.dsh-reasoning-custom__field input::placeholder{color:var(--dsw-alias-label-dimmed);}\n.dsh-ccswitch-import{border-top:1px solid var(--dsw-alias-border-l2);padding-top:16px;color:var(--dsw-alias-label-primary);}\n.dsh-ccswitch-import__header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}\n.dsh-ccswitch-import__title{margin:0 0 4px;color:var(--dsw-alias-label-primary);font-size:16px;font-weight:500;line-height:24px;}\n.dsh-ccswitch-import__hint,.dsh-ccswitch-import__empty{margin:0 0 12px;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;}\n.dsh-ccswitch-import__actions{display:flex;gap:8px;flex-wrap:wrap;}\n.dsh-ccswitch-import__secondary{box-sizing:border-box;min-height:28px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:transparent;color:var(--dsw-alias-label-primary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}\n.dsh-ccswitch-import__secondary:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}\n.dsh-ccswitch-import__list{display:flex;flex-direction:column;gap:8px;}\n.dsh-ccswitch-import__row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);}\n.dsh-ccswitch-import__row--blocked{opacity:.6;}\n.dsh-ccswitch-import__meta{display:flex;min-width:0;flex-direction:column;gap:3px;}\n.dsh-ccswitch-import__meta strong,.dsh-ccswitch-import__meta code,.dsh-ccswitch-import__meta span{overflow-wrap:anywhere;}\n.dsh-ccswitch-import__meta strong{color:var(--dsw-alias-label-primary);font-size:13px;line-height:20px;}\n.dsh-ccswitch-import__provider-key{color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code,monospace);font-size:11px;line-height:16px;}\n.dsh-ccswitch-import__warnings{color:var(--dsw-alias-state-warn-primary);font-size:12px;line-height:18px;}\n.dsh-ccswitch-import__meta code{color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code,monospace);font-size:11px;line-height:16px;}\n.dsh-ccswitch-import__meta span{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;}\n.dsh-ccswitch-import__status{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;white-space:nowrap;}\n.dsh-ccswitch-import__error{margin:0 0 12px;color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px;}\n.dsh-ccswitch-import__results{margin:12px 0 0;padding-left:20px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;}\n@media (max-width:640px){.dsh-ccswitch-import__header{flex-direction:column;}.dsh-ccswitch-import__actions{width:100%;flex-direction:column;align-items:stretch;}.dsh-ccswitch-import__actions button{width:100%;}.dsh-ccswitch-import__row{grid-template-columns:auto minmax(0,1fr);}.dsh-ccswitch-import__status{grid-column:2;white-space:normal;}.dsh-reasoning-model__top{align-items:stretch;flex-direction:column;}.dsh-reasoning-model__actions{justify-content:flex-start;flex-wrap:wrap;}.dsh-reasoning-save{flex:1;}.dsh-reasoning-levels{align-items:flex-start;}.dsh-reasoning-levels__label{width:100%;line-height:18px;}.dsh-reasoning-custom__body{grid-template-columns:minmax(0,1fr);}}';
 		function installEmbedStyles() {
 		  if (typeof document === "undefined") return () => {
 		  };
