@@ -2,5 +2,5 @@
 # The node half (exports ".") runs in the host process (SQLite scan, /api/dsh-ccswitch routes),
 # and the dsh.client declaration makes the browser half (exports "./client") load in the web GUI.
 - insert:
-    - id: ccswitch-importer
+    - id: dsh-ccswitch-importer
       name: dsh-ccswitch-importer
