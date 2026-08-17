@@ -1,169 +1,3 @@
-// lib/core/scan.js
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
-
-// lib/core/toml.js
-function stripInlineComment(value) {
-  const first = value[0];
-  if (first === '"' || first === "'") {
-    const close = value.indexOf(first, 1);
-    if (close !== -1) return value.slice(0, close + 1);
-    return value;
-  }
-  const comment = value.indexOf(" #");
-  if (comment !== -1) return value.slice(0, comment);
-  return value;
-}
-function unquote(raw) {
-  const value = stripInlineComment(raw.trim());
-  if (value.length >= 2) {
-    const first = value[0];
-    const last = value[value.length - 1];
-    if (first === '"' && last === '"' || first === "'" && last === "'") {
-      return value.slice(1, -1);
-    }
-  }
-  return value;
-}
-function parseBool(raw) {
-  const value = unquote(raw).toLowerCase();
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return void 0;
-}
-function parseCodexToml(text) {
-  if (typeof text !== "string" || text.trim() === "") {
-    return { model: void 0, reasoningEffort: void 0, provider: null };
-  }
-  let model;
-  let reasoningEffort;
-  let section = null;
-  let provider = null;
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (line === "" || line.startsWith("#")) continue;
-    const sectionMatch = line.match(/^\[([^\]]+)\]$/);
-    if (sectionMatch) {
-      section = sectionMatch[1];
-      if (section === "model_providers.custom") {
-        provider = { name: void 0, baseUrl: void 0, wireApi: void 0, requiresOpenaiAuth: void 0 };
-      }
-      continue;
-    }
-    const eq = line.indexOf("=");
-    if (eq === -1) continue;
-    const key = line.slice(0, eq).trim();
-    const rawValue = line.slice(eq + 1).trim();
-    if (section === null && key === "model") {
-      model = unquote(rawValue);
-      continue;
-    }
-    if (section === null && key === "model_reasoning_effort") {
-      reasoningEffort = unquote(rawValue);
-      continue;
-    }
-    if (section === "model_providers.custom" && provider) {
-      if (key === "name") provider.name = unquote(rawValue);
-      else if (key === "base_url") provider.baseUrl = unquote(rawValue);
-      else if (key === "wire_api") provider.wireApi = unquote(rawValue);
-      else if (key === "requires_openai_auth") provider.requiresOpenaiAuth = parseBool(rawValue);
-    }
-  }
-  return { model, reasoningEffort, provider };
-}
-
-// lib/core/extract.js
-var SKIP_OFFICIAL = /* @__PURE__ */ new Set(["codex-official"]);
-var SKIP_NAMES = /* @__PURE__ */ new Set(["default"]);
-function extractProfile(row) {
-  const profileId = String(row.id ?? "");
-  const profileName = String(row.name ?? "");
-  if (SKIP_OFFICIAL.has(profileId)) {
-    return { profileId, profileName, skipped: true, skipReason: "\u5B98\u65B9 Codex \u767B\u5F55\u6001\uFF08official\uFF09\u4E0D\u652F\u6301\u5BFC\u5165" };
-  }
-  if (SKIP_NAMES.has(profileName) || profileName === "OpenAI Official") {
-    return { profileId, profileName, skipped: true, skipReason: "\u5B98\u65B9/\u9ED8\u8BA4 provider \u4E0D\u652F\u6301\u5BFC\u5165" };
-  }
-  const base = {
-    profileId,
-    profileName,
-    isCurrent: Boolean(row.is_current),
-    blocked: false,
-    blockedReason: "",
-    warnings: [],
-    unsupported: [],
-    apiKey: void 0,
-    baseURL: "",
-    api: void 0,
-    models: [],
-    modelReasoningEffort: void 0
-  };
-  let parsed;
-  try {
-    parsed = JSON.parse(String(row.settings_config ?? "{}"));
-  } catch {
-    return { ...base, blocked: true, blockedReason: "settings_config \u4E0D\u662F\u5408\u6CD5 JSON" };
-  }
-  const auth = (parsed && typeof parsed === "object" ? parsed.auth : void 0) ?? {};
-  const apiKey = typeof auth.OPENAI_API_KEY === "string" && auth.OPENAI_API_KEY.length > 0 ? auth.OPENAI_API_KEY : void 0;
-  if (apiKey === void 0) {
-    return { ...base, blocked: true, blockedReason: "\u672A\u627E\u5230 API key\uFF08auth.OPENAI_API_KEY \u7F3A\u5931\uFF09" };
-  }
-  const configText = typeof parsed.config === "string" ? parsed.config : "";
-  const { model, reasoningEffort, provider } = parseCodexToml(configText);
-  if (!provider || typeof provider.baseUrl !== "string" || provider.baseUrl === "") {
-    return { ...base, blocked: true, blockedReason: "config \u4E2D\u7F3A\u5C11\u53EF\u7528\u7684 [model_providers.custom] \u6BB5" };
-  }
-  const warnings = [];
-  if (provider.requiresOpenaiAuth === true) {
-    warnings.push("provider \u6807\u8BB0 requires_openai_auth\uFF0C\u5BFC\u5165\u540E\u53EF\u80FD\u4ECD\u65E0\u6CD5\u901A\u8FC7 API key \u8BA4\u8BC1");
-  }
-  if (provider.wireApi !== void 0 && provider.wireApi !== "responses" && provider.wireApi !== "chat") {
-    warnings.push(`\u672A\u77E5 wire_api "${provider.wireApi}"\uFF0C\u6309 openai-completions \u5904\u7406`);
-  }
-  if (!model) {
-    warnings.push("config \u4E2D\u6CA1\u6709 model \u5B57\u6BB5\uFF0C\u5BFC\u5165\u540E\u9700\u5728 DSH \u4E2D\u8865\u5145\u6A21\u578B");
-  }
-  const api = provider.wireApi === "responses" ? "openai-responses" : "openai-completions";
-  return {
-    ...base,
-    apiKey,
-    baseURL: provider.baseUrl,
-    api,
-    models: model ? [{ id: model }] : [],
-    modelReasoningEffort: reasoningEffort,
-    warnings,
-    unsupported: []
-  };
-}
-
-// lib/core/scan.js
-var DEFAULT_DB_CANDIDATES = [
-  () => join(homedir(), ".cc-switch", "cc-switch.db")
-];
-function openDb(dbPath) {
-  return new DatabaseSync(dbPath, { readOnly: true });
-}
-function discoverSources() {
-  return DEFAULT_DB_CANDIDATES.map((fn) => fn()).filter((p) => existsSync(p));
-}
-function scanProfiles(dbPath) {
-  if (typeof dbPath !== "string" || dbPath === "" || !existsSync(dbPath)) return [];
-  let db;
-  try {
-    db = openDb(dbPath);
-    const rows = db.prepare("SELECT id, name, settings_config, is_current, app_type FROM providers").all();
-    return rows.filter((row) => row.app_type === "codex").map((row) => extractProfile(row)).filter((profile) => profile !== void 0);
-  } catch (err) {
-    console.error("[dsh-ccswitch-importer] scan failed:", err);
-    return [];
-  } finally {
-    if (db) db.close();
-  }
-}
-
 // lib/core/ids.js
 import { createHash } from "node:crypto";
 function shortHash(input, length) {
@@ -475,6 +309,172 @@ function safeError(err) {
   return message.replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-<redacted>");
 }
 
+// lib/core/scan.js
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+
+// lib/core/toml.js
+function stripInlineComment(value) {
+  const first = value[0];
+  if (first === '"' || first === "'") {
+    const close = value.indexOf(first, 1);
+    if (close !== -1) return value.slice(0, close + 1);
+    return value;
+  }
+  const comment = value.indexOf(" #");
+  if (comment !== -1) return value.slice(0, comment);
+  return value;
+}
+function unquote(raw) {
+  const value = stripInlineComment(raw.trim());
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if (first === '"' && last === '"' || first === "'" && last === "'") {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+}
+function parseBool(raw) {
+  const value = unquote(raw).toLowerCase();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return void 0;
+}
+function parseCodexToml(text) {
+  if (typeof text !== "string" || text.trim() === "") {
+    return { model: void 0, reasoningEffort: void 0, provider: null };
+  }
+  let model;
+  let reasoningEffort;
+  let section = null;
+  let provider = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    const sectionMatch = line.match(/^\[([^\]]+)\]$/);
+    if (sectionMatch) {
+      section = sectionMatch[1];
+      if (section === "model_providers.custom") {
+        provider = { name: void 0, baseUrl: void 0, wireApi: void 0, requiresOpenaiAuth: void 0 };
+      }
+      continue;
+    }
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    const rawValue = line.slice(eq + 1).trim();
+    if (section === null && key === "model") {
+      model = unquote(rawValue);
+      continue;
+    }
+    if (section === null && key === "model_reasoning_effort") {
+      reasoningEffort = unquote(rawValue);
+      continue;
+    }
+    if (section === "model_providers.custom" && provider) {
+      if (key === "name") provider.name = unquote(rawValue);
+      else if (key === "base_url") provider.baseUrl = unquote(rawValue);
+      else if (key === "wire_api") provider.wireApi = unquote(rawValue);
+      else if (key === "requires_openai_auth") provider.requiresOpenaiAuth = parseBool(rawValue);
+    }
+  }
+  return { model, reasoningEffort, provider };
+}
+
+// lib/core/extract.js
+var SKIP_OFFICIAL = /* @__PURE__ */ new Set(["codex-official"]);
+var SKIP_NAMES = /* @__PURE__ */ new Set(["default"]);
+function extractProfile(row) {
+  const profileId = String(row.id ?? "");
+  const profileName = String(row.name ?? "");
+  if (SKIP_OFFICIAL.has(profileId)) {
+    return { profileId, profileName, skipped: true, skipReason: "\u5B98\u65B9 Codex \u767B\u5F55\u6001\uFF08official\uFF09\u4E0D\u652F\u6301\u5BFC\u5165" };
+  }
+  if (SKIP_NAMES.has(profileName) || profileName === "OpenAI Official") {
+    return { profileId, profileName, skipped: true, skipReason: "\u5B98\u65B9/\u9ED8\u8BA4 provider \u4E0D\u652F\u6301\u5BFC\u5165" };
+  }
+  const base = {
+    profileId,
+    profileName,
+    isCurrent: Boolean(row.is_current),
+    blocked: false,
+    blockedReason: "",
+    warnings: [],
+    unsupported: [],
+    apiKey: void 0,
+    baseURL: "",
+    api: void 0,
+    models: [],
+    modelReasoningEffort: void 0
+  };
+  let parsed;
+  try {
+    parsed = JSON.parse(String(row.settings_config ?? "{}"));
+  } catch {
+    return { ...base, blocked: true, blockedReason: "settings_config \u4E0D\u662F\u5408\u6CD5 JSON" };
+  }
+  const auth = (parsed && typeof parsed === "object" ? parsed.auth : void 0) ?? {};
+  const apiKey = typeof auth.OPENAI_API_KEY === "string" && auth.OPENAI_API_KEY.length > 0 ? auth.OPENAI_API_KEY : void 0;
+  if (apiKey === void 0) {
+    return { ...base, blocked: true, blockedReason: "\u672A\u627E\u5230 API key\uFF08auth.OPENAI_API_KEY \u7F3A\u5931\uFF09" };
+  }
+  const configText = typeof parsed.config === "string" ? parsed.config : "";
+  const { model, reasoningEffort, provider } = parseCodexToml(configText);
+  if (!provider || typeof provider.baseUrl !== "string" || provider.baseUrl === "") {
+    return { ...base, blocked: true, blockedReason: "config \u4E2D\u7F3A\u5C11\u53EF\u7528\u7684 [model_providers.custom] \u6BB5" };
+  }
+  const warnings = [];
+  if (provider.requiresOpenaiAuth === true) {
+    warnings.push("provider \u6807\u8BB0 requires_openai_auth\uFF0C\u5BFC\u5165\u540E\u53EF\u80FD\u4ECD\u65E0\u6CD5\u901A\u8FC7 API key \u8BA4\u8BC1");
+  }
+  if (provider.wireApi !== void 0 && provider.wireApi !== "responses" && provider.wireApi !== "chat") {
+    warnings.push(`\u672A\u77E5 wire_api "${provider.wireApi}"\uFF0C\u6309 openai-completions \u5904\u7406`);
+  }
+  if (!model) {
+    warnings.push("config \u4E2D\u6CA1\u6709 model \u5B57\u6BB5\uFF0C\u5BFC\u5165\u540E\u9700\u5728 DSH \u4E2D\u8865\u5145\u6A21\u578B");
+  }
+  const api = provider.wireApi === "responses" ? "openai-responses" : "openai-completions";
+  return {
+    ...base,
+    apiKey,
+    baseURL: provider.baseUrl,
+    api,
+    models: model ? [{ id: model }] : [],
+    modelReasoningEffort: reasoningEffort,
+    warnings,
+    unsupported: []
+  };
+}
+
+// lib/core/scan.js
+var DEFAULT_DB_CANDIDATES = [
+  () => join(homedir(), ".cc-switch", "cc-switch.db")
+];
+function openDb(dbPath) {
+  return new DatabaseSync(dbPath, { readOnly: true });
+}
+function discoverSources() {
+  return DEFAULT_DB_CANDIDATES.map((fn) => fn()).filter((p) => existsSync(p));
+}
+function scanProfiles(dbPath) {
+  if (typeof dbPath !== "string" || dbPath === "" || !existsSync(dbPath)) return [];
+  let db;
+  try {
+    db = openDb(dbPath);
+    const rows = db.prepare("SELECT id, name, settings_config, is_current, app_type FROM providers").all();
+    return rows.filter((row) => row.app_type === "codex").map((row) => extractProfile(row)).filter((profile) => profile !== void 0);
+  } catch (err) {
+    console.error("[dsh-ccswitch-importer] scan failed:", err);
+    return [];
+  } finally {
+    if (db) db.close();
+  }
+}
+
 // src/host/routes.mjs
 var API_BASE = "/api/dsh-ccswitch";
 var MAX_JSON_BODY_BYTES = 64 * 1024;
@@ -612,13 +612,8 @@ function makeRoutes(deps = {}) {
 // src/host/index.mjs
 var name = "dsh-ccswitch-importer";
 var inject = ["webServer", "settings", "credentials"];
-function scanCCSwitch() {
-  const sources = discoverSources();
-  return sources.length === 0 ? [] : scanProfiles(sources[0]);
-}
 function apply(ctx) {
   const routes = makeRoutes({
-    scan: scanCCSwitch,
     getProviders: async () => {
       const value = await ctx.settings.get("llm-pi-ai");
       return value?.providers ?? {};

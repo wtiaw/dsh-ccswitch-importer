@@ -15,5 +15,8 @@ test('package points at the bundled Host and Client entries', async () => {
   assert.equal(packageJson.main, 'dist/index.mjs')
   assert.equal(packageJson.exports['./client'], './dist/client.js')
   assert.equal(packageJson.scripts.build, 'node scripts/build.mjs')
+  const clientBundle = await readFile(new URL('../dist/client.js', import.meta.url), 'utf8')
+  const hostBundle = await readFile(new URL('../dist/index.mjs', import.meta.url), 'utf8')
+  assert.match(clientBundle, /CCSwitch/)
+  assert.match(hostBundle, /\/api\/dsh-ccswitch/)
 })
-

@@ -1,5 +1,6 @@
 import React from "react";
 import { ReasoningSettingsSection } from "./ReasoningSettingsSection.mjs";
+import { CCSwitchImportSection } from "./CCSwitchImportSection.mjs";
 
 const h = React.createElement;
 
@@ -8,7 +9,7 @@ const h = React.createElement;
  * It renders the original ModelsSection (read from the raw slot ledger) and
  * appends the per-model reasoning editor, so no separate settings page exists.
  */
-export function ModelsReasoningComposite({ controller, slots, t, close }) {
+export function ModelsReasoningComposite({ controller, importer, slots, t, close }) {
   const builtIn = slots.entries("settings.section").find((entry) => (
     entry.options.id === "models" && entry.component !== ModelsReasoningComposite
   ));
@@ -21,6 +22,7 @@ export function ModelsReasoningComposite({ controller, slots, t, close }) {
 
   return h("div", { className: "dsh-reasoning-composite" },
     modelsPage,
+    h(CCSwitchImportSection, { controller: importer }),
     h("section", { className: "dsh-reasoning-embed", "aria-label": t?.("nav") ?? "Model reasoning" },
       h("h2", { className: "dsh-reasoning-embed__title" }, t?.("nav") ?? "模型推理"),
       h("p", { className: "dsh-reasoning-embed__hint" },

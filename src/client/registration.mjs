@@ -6,7 +6,7 @@ export const SETTINGS_SECTION_ID = "models";
  * is rendered by our composite component, so the reasoning controls appear on
  * the same page instead of adding a separate top-level settings page.
  */
-export function registerReasoningSettings(ctx, { controller, component, t }) {
+export function registerReasoningSettings(ctx, { controller, importer, component, t }) {
   ctx.locale?.register?.("dsh-ccswitch-importer", {
     zh: { nav: "模型推理" },
     en: { nav: "Model reasoning" },
@@ -20,13 +20,14 @@ export function registerReasoningSettings(ctx, { controller, component, t }) {
     // built-in entry so the composite can render it in place.
     priority: -1,
     order: 10,
-    inject: () => ({ controller, slots: ctx.slots, t }),
+    inject: () => ({ controller, importer, slots: ctx.slots, t }),
   }, component));
 
   const disposers = [
-    ctx.remote.$on("settings/document-updated", () => controller.refresh()),
-    ctx.remote.$on("llm/adapters-updated", () => controller.refresh()),
-    ctx.remote.$on("connection/reset", () => controller.refresh()),
+    ctx.remote.$on("settings/document-updated", () => { void controller.refresh(); }),
+    ctx.remote.$on("llm/adapters-updated", () => { void controller.refresh(); }),
+    ctx.remote.$on("credentials/updated", () => { void importer?.scan?.(); }),
+    ctx.remote.$on("connection/reset", () => { void controller.refresh(); }),
   ];
   return () => disposers.forEach((dispose) => dispose());
 }
