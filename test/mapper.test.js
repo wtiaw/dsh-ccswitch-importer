@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { toProviderProfile, redactSummary, classifyProfiles, resolveProviderKey, normalizeBaseUrl } from '../lib/core/mapper.js'
-import { providerKey, credentialRefFor } from '../lib/core/ids.js'
+import { providerKey, credentialRefFor, variantKey } from '../lib/core/ids.js'
 
 const profile = {
   profileId: '星渡-1786264467316',
@@ -99,6 +99,24 @@ test('resolveProviderKey returns base key, variant on collision', () => {
   assert.equal(collided.warnings.length, 1)
   assert.match(collided.warnings[0], /已存在同名 provider/)
   assert.ok(!JSON.stringify(collided).includes('sk-SUPER-SECRET'))
+})
+
+test('reuses an existing variant after a base-key collision', () => {
+  const baseKey = providerKey(profile.profileId, profile.profileName)
+  const variant = variantKey(baseKey, 1)
+  const resolved = resolveProviderKey(profile, {
+    [baseKey]: { displayName: 'other', baseURL: 'https://different.example' },
+    [variant]: { displayName: '星渡', baseURL: 'https://aiwtiaw.top' },
+  })
+  assert.equal(resolved.key, variant)
+})
+
+test('classifyProfiles reports preserved local reasoning in warnings', () => {
+  const key = providerKey(profile.profileId, profile.profileName)
+  const existing = { ...toProviderProfile(profile), reasoning: 'low' }
+  const classified = classifyProfiles([profile], { [key]: existing })
+  assert.match(classified[0].warnings[0], /保留现有 route reasoning/)
+  assert.match(classified[0].summary.warnings[0], /保留现有 route reasoning/)
 })
 
 test('classifyProfiles leaves input profiles untouched', () => {

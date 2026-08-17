@@ -4,7 +4,8 @@ import { importProfiles as runImport } from '../../lib/core/importer.js'
 
 export const API_BASE = '/api/dsh-ccswitch'
 const MAX_JSON_BODY_BYTES = 64 * 1024
-const SECRET_KEYS = new Set(['apiKey', 'api_key', 'OPENAI_API_KEY', 'credentialValue', 'rawConfig', 'settingsConfig'])
+const SAFE_STATUSES = new Set(['new', 'update', 'updated', 'unchanged', 'blocked', 'failed', 'skipped'])
+const SAFE_REASONING = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
 
 export function isLoopbackRequest(request) {
   const address = request.socket?.remoteAddress
@@ -20,24 +21,71 @@ export function isLoopbackRequest(request) {
   try { return new URL(origin).host === hostUrl.host } catch { return false }
 }
 
-export function safeError(error) {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-<redacted>')
+export function safeError() {
+  return 'request failed'
 }
 
-function publicValue(value, key) {
-  if (SECRET_KEYS.has(key)) return undefined
-  if (typeof value === 'string') return value.replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-<redacted>')
-  if (Array.isArray(value)) return value.map((item) => publicValue(item, undefined)).filter((item) => item !== undefined)
-  if (value && typeof value === 'object') {
-    const result = {}
-    for (const [childKey, childValue] of Object.entries(value)) {
-      const publicChild = publicValue(childValue, childKey)
-      if (publicChild !== undefined) result[childKey] = publicChild
-    }
-    return result
+function publicText(value) {
+  return typeof value === 'string' ? value.slice(0, 200) : undefined
+}
+
+function publicEndpoint(value) {
+  if (typeof value !== 'string') return undefined
+  try {
+    const url = new URL(value)
+    return `${url.origin}${url.pathname}`
+  } catch {
+    return undefined
   }
-  return value
+}
+
+function publicWarning(value) {
+  const text = String(value ?? '')
+  if (text.includes('requires_openai_auth')) return 'provider requires OpenAI authentication'
+  if (text.includes('没有 model')) return 'model is missing from the source profile'
+  if (text.startsWith('unknown reasoning effort')) return 'unknown reasoning effort; configure it in DSH'
+  if (text.startsWith('reasoning effort')) return 'reasoning effort is outside the conservative catalog'
+  if (text.includes('已保留模型')) return 'existing model reasoning settings were preserved'
+  if (text.includes('已保留现有 route')) return 'existing route reasoning was preserved'
+  if (text.includes('provider 键') || text.includes('同名 provider')) return 'provider key collision; existing provider was preserved'
+  return 'source profile contains an import warning'
+}
+
+function publicWarnings(value) {
+  return Array.isArray(value) ? value.slice(0, 20).map(publicWarning) : []
+}
+
+function publicSummary(summary) {
+  return {
+    profileId: publicText(summary.profileId),
+    profileName: publicText(summary.profileName),
+    sourceLabel: 'CCSwitch',
+    providerKey: publicText(summary.providerKey),
+    baseURL: publicEndpoint(summary.baseURL),
+    api: publicText(summary.api),
+    modelCount: Number.isInteger(summary.modelCount) ? summary.modelCount : 0,
+    modelIds: Array.isArray(summary.modelIds) ? summary.modelIds.filter((id) => typeof id === 'string').slice(0, 100) : [],
+    credential: summary.credential === 'found' ? 'found' : 'missing',
+    reasoningEffort: SAFE_REASONING.has(summary.reasoningEffort) ? summary.reasoningEffort : undefined,
+    status: SAFE_STATUSES.has(summary.status) ? summary.status : 'blocked',
+    warnings: publicWarnings(summary.warnings),
+    blockedReason: summary.blockedReason ? 'source profile is blocked' : undefined,
+  }
+}
+
+function publicResult(result) {
+  const status = SAFE_STATUSES.has(result?.status) ? result.status : 'failed'
+  const output = {
+    profileId: publicText(result?.profileId),
+    profileName: publicText(result?.profileName),
+    providerKey: publicText(result?.providerKey),
+    status,
+    warnings: publicWarnings(result?.warnings),
+  }
+  if (status === 'failed') output.error = 'import failed'
+  if (status === 'blocked') output.error = 'profile blocked'
+  if (status === 'skipped') output.skipReason = 'profile was not selected or is not importable'
+  return output
 }
 
 export function writeJson(response, status, body) {
@@ -46,7 +94,7 @@ export function writeJson(response, status, body) {
     'cache-control': 'no-store',
     'referrer-policy': 'no-referrer',
   })
-  response.end(JSON.stringify(publicValue(body)))
+  response.end(JSON.stringify(body))
 }
 
 export async function readJsonBody(request) {
@@ -98,9 +146,9 @@ export function makeRoutes(deps = {}) {
         if (!methodFence(request, response, isLoopback, 'GET')) return
         try {
           const classified = classifyProfiles(await scan(), await getProviders())
-          writeJson(response, 200, { profiles: classified.map((item) => item.summary) })
-        } catch (error) {
-          writeJson(response, 500, { error: safeError(error) })
+          writeJson(response, 200, { profiles: classified.map((item) => publicSummary(item.summary)) })
+        } catch {
+          writeJson(response, 500, { error: 'scan failed' })
         }
       },
     },
@@ -126,9 +174,9 @@ export function makeRoutes(deps = {}) {
             credentials,
             expectedRevision: body.expectedRevision,
           })
-          writeJson(response, 200, { results })
-        } catch (error) {
-          writeJson(response, 500, { error: safeError(error) })
+          writeJson(response, 200, { results: results.map(publicResult) })
+        } catch {
+          writeJson(response, 500, { error: 'import failed' })
         }
       },
     },

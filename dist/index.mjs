@@ -12,15 +12,10 @@ function providerKey(profileId, profileName) {
   const hash = shortHash(`${profileId}::${profileName}`, 8);
   return `ccs-${slug}-${hash}`;
 }
-function credentialRefFor(providerKeyValue) {
-  const hash = providerKeyValue.split("-").pop();
-  if (!/^[a-f0-9]{8}$/.test(hash)) {
-    throw new Error(`credentialRefFor: expected an 8-hex hash tail, got "${hash}"`);
-  }
+function credentialRefForProviderKey(providerKeyValue) {
+  const tail = String(providerKeyValue).split("-").pop();
+  const hash = /^[a-f0-9]{8}$/.test(tail) ? tail : shortHash(String(providerKeyValue), 8);
   return `DSH_CCSWITCH_${hash.toUpperCase()}_API_KEY`;
-}
-function credentialRef(profileId, profileName) {
-  return credentialRefFor(providerKey(profileId, profileName));
 }
 function variantKey(baseKey, index) {
   return `${baseKey}-${shortHash(`${baseKey}::${index}`, 4)}`;
@@ -43,6 +38,8 @@ var O_SERIES_REASONING = Object.freeze({
 });
 var KNOWN_REASONING_CATALOG = Object.freeze({
   "gpt-5.6-sol": GPT_56_REASONING,
+  "gpt-5.6-luna": GPT_56_REASONING,
+  "gpt-5.6-terra": GPT_56_REASONING,
   o1: O_SERIES_REASONING,
   "o1-pro": O_SERIES_REASONING,
   o3: O_SERIES_REASONING,
@@ -56,7 +53,6 @@ function cloneReasoningEfforts(efforts) {
 function knownReasoningFor(modelId) {
   if (typeof modelId !== "string") return void 0;
   const key = modelId.trim().toLowerCase();
-  if (["luna", "sol", "terra"].includes(key.replace("gpt-5.6-", ""))) return cloneReasoningEfforts(GPT_56_REASONING);
   return cloneReasoningEfforts(KNOWN_REASONING_CATALOG[key]);
 }
 
@@ -109,12 +105,34 @@ function profileWarnings(profile, extra = []) {
   const seed = modelId === void 0 ? { warnings: [] } : seedReasoning(modelId, profile.modelReasoningEffort);
   return [.../* @__PURE__ */ new Set([...profile.warnings ?? [], ...seed.warnings ?? [], ...extra])];
 }
+function preservationWarnings(profile, existing) {
+  if (!isObject(existing)) return [];
+  const warnings = [];
+  const primaryModel = profile.models?.find((model) => typeof model?.id === "string");
+  if (existing.reasoning !== void 0 && primaryModel) {
+    const importedDefault = seedReasoning(primaryModel.id, profile.modelReasoningEffort).defaultEffort;
+    if (importedDefault !== void 0 && existing.reasoning !== importedDefault) {
+      warnings.push(`\u5DF2\u4FDD\u7559\u73B0\u6709 route reasoning ${existing.reasoning}\uFF0C\u672A\u8986\u76D6\u5BFC\u5165\u503C ${importedDefault}`);
+    }
+  }
+  const existingModels = Array.isArray(existing.models) ? existing.models : [];
+  for (const sourceModel of profile.models ?? []) {
+    const current = existingModels.find((model) => model?.id === sourceModel?.id);
+    if (!current || current.reasoningEfforts === void 0) continue;
+    const importedEfforts = seedReasoning(sourceModel.id, profile.modelReasoningEffort).efforts;
+    if (importedEfforts !== void 0 && JSON.stringify(current.reasoningEfforts) !== JSON.stringify(importedEfforts)) {
+      warnings.push(`\u5DF2\u4FDD\u7559\u6A21\u578B ${sourceModel.id} \u7684\u73B0\u6709 reasoningEfforts`);
+    }
+  }
+  return warnings;
+}
 function normalizeBaseUrl(url) {
   return String(url ?? "").replace(/\/+$/, "");
 }
-function toProviderProfile(profile, existing) {
+function toProviderProfile(profile, existing, providerKeyValue) {
   const previous = isObject(existing) ? existing : {};
-  const key = credentialRefFor(providerKey(profile.profileId, profile.profileName));
+  const resolvedKey = providerKeyValue ?? providerKey(profile.profileId, profile.profileName);
+  const key = credentialRefForProviderKey(resolvedKey);
   const existingModels = Array.isArray(previous.models) ? previous.models : [];
   const sourceModels = (profile.models ?? []).filter((model) => typeof model?.id === "string" && model.id.length > 0);
   const sourceIds = new Set(sourceModels.map((model) => model.id));
@@ -165,13 +183,25 @@ function resolveProviderKey(profile, existingProviders) {
   const existing = existingProviders ?? {};
   const baseKey = providerKey(profile.profileId, profile.profileName);
   let key = baseKey;
-  let warnings = profileWarnings(profile);
-  if (existing[key] !== void 0 && !(existing[key].displayName === profile.profileName && existing[key].baseURL === normalizeBaseUrl(profile.baseURL))) {
+  const sameRoute = (entry) => entry?.displayName === profile.profileName && entry?.baseURL === normalizeBaseUrl(profile.baseURL);
+  let collisionWarning;
+  if (existing[key] !== void 0 && !sameRoute(existing[key])) {
     let index = 1;
-    while (existing[variantKey(baseKey, index)] !== void 0) index += 1;
-    key = variantKey(baseKey, index);
-    warnings = [...warnings, `\u5DF2\u5B58\u5728\u540C\u540D provider\uFF0C\u5C06\u4F7F\u7528 ${key} \u5BFC\u5165\uFF0C\u4E0D\u8986\u76D6\u73B0\u6709\u914D\u7F6E`];
+    while (existing[variantKey(baseKey, index)] !== void 0) {
+      const candidate = variantKey(baseKey, index);
+      if (sameRoute(existing[candidate])) {
+        key = candidate;
+        break;
+      }
+      index += 1;
+    }
+    if (key === baseKey) key = variantKey(baseKey, index);
+    collisionWarning = `\u5DF2\u5B58\u5728\u540C\u540D provider\uFF0C\u5C06\u4F7F\u7528 ${key} \u5BFC\u5165\uFF0C\u4E0D\u8986\u76D6\u73B0\u6709\u914D\u7F6E`;
   }
+  const warnings = profileWarnings(profile, [
+    ...collisionWarning ? [collisionWarning] : [],
+    ...preservationWarnings(profile, existing[key])
+  ]);
   return { key, warnings };
 }
 function classifyProfiles(profiles, existingProviders) {
@@ -195,12 +225,12 @@ function classifyProfiles(profiles, existingProviders) {
         status: "blocked",
         providerKey: key,
         warnings: [...warnings, duplicateWarning],
-        summary: redactSummary(profile, key, "blocked", [duplicateWarning])
+        summary: redactSummary(profile, key, "blocked", [...warnings, duplicateWarning])
       };
     }
     seen.set(key, true);
     const existingEntry = existing[key];
-    const mapped = toProviderProfile(profile, existingEntry);
+    const mapped = toProviderProfile(profile, existingEntry, key);
     const status = existingEntry === void 0 ? "new" : JSON.stringify(existingEntry) === JSON.stringify(mapped) ? "unchanged" : "update";
     return {
       profileId: profile.profileId,
@@ -208,7 +238,7 @@ function classifyProfiles(profiles, existingProviders) {
       status,
       providerKey: key,
       warnings,
-      summary: redactSummary(profile, key, status)
+      summary: redactSummary(profile, key, status, warnings)
     };
   });
 }
@@ -232,15 +262,15 @@ async function importProfiles({ profiles, selectedIds, settings, credentials, ex
       results.push({ profileId: profile.profileId, profileName: profile.profileName, status: "blocked", error: profile.blockedReason });
       continue;
     }
-    const ref = credentialRef(profile.profileId, profile.profileName);
     const { key, warnings } = resolveProviderKey(profile, existing);
+    const ref = credentialRefForProviderKey(key);
     if (usedKeys.has(key)) {
       results.push({ profileId: profile.profileId, profileName: profile.profileName, status: "blocked", error: `provider \u952E ${key} \u91CD\u590D`, warnings });
       continue;
     }
     usedKeys.add(key);
     const wasConfigured = existing[key] !== void 0;
-    const mapped = toProviderProfile(profile, existing[key]);
+    const mapped = toProviderProfile(profile, existing[key], key);
     if (wasConfigured && JSON.stringify(existing[key]) === JSON.stringify(mapped)) {
       results.push({ profileId: profile.profileId, profileName: profile.profileName, providerKey: key, status: "unchanged", warnings });
       continue;
@@ -478,7 +508,8 @@ function scanProfiles(dbPath) {
 // src/host/routes.mjs
 var API_BASE = "/api/dsh-ccswitch";
 var MAX_JSON_BODY_BYTES = 64 * 1024;
-var SECRET_KEYS = /* @__PURE__ */ new Set(["apiKey", "api_key", "OPENAI_API_KEY", "credentialValue", "rawConfig", "settingsConfig"]);
+var SAFE_STATUSES = /* @__PURE__ */ new Set(["new", "update", "updated", "unchanged", "blocked", "failed", "skipped"]);
+var SAFE_REASONING = /* @__PURE__ */ new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 function isLoopbackRequest(request) {
   const address = request.socket?.remoteAddress;
   if (address !== "127.0.0.1" && address !== "::1" && address !== "::ffff:127.0.0.1") return false;
@@ -500,23 +531,62 @@ function isLoopbackRequest(request) {
     return false;
   }
 }
-function safeError2(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-<redacted>");
+function publicText(value) {
+  return typeof value === "string" ? value.slice(0, 200) : void 0;
 }
-function publicValue(value, key) {
-  if (SECRET_KEYS.has(key)) return void 0;
-  if (typeof value === "string") return value.replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-<redacted>");
-  if (Array.isArray(value)) return value.map((item) => publicValue(item, void 0)).filter((item) => item !== void 0);
-  if (value && typeof value === "object") {
-    const result = {};
-    for (const [childKey, childValue] of Object.entries(value)) {
-      const publicChild = publicValue(childValue, childKey);
-      if (publicChild !== void 0) result[childKey] = publicChild;
-    }
-    return result;
+function publicEndpoint(value) {
+  if (typeof value !== "string") return void 0;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return void 0;
   }
-  return value;
+}
+function publicWarning(value) {
+  const text = String(value ?? "");
+  if (text.includes("requires_openai_auth")) return "provider requires OpenAI authentication";
+  if (text.includes("\u6CA1\u6709 model")) return "model is missing from the source profile";
+  if (text.startsWith("unknown reasoning effort")) return "unknown reasoning effort; configure it in DSH";
+  if (text.startsWith("reasoning effort")) return "reasoning effort is outside the conservative catalog";
+  if (text.includes("\u5DF2\u4FDD\u7559\u6A21\u578B")) return "existing model reasoning settings were preserved";
+  if (text.includes("\u5DF2\u4FDD\u7559\u73B0\u6709 route")) return "existing route reasoning was preserved";
+  if (text.includes("provider \u952E") || text.includes("\u540C\u540D provider")) return "provider key collision; existing provider was preserved";
+  return "source profile contains an import warning";
+}
+function publicWarnings(value) {
+  return Array.isArray(value) ? value.slice(0, 20).map(publicWarning) : [];
+}
+function publicSummary(summary) {
+  return {
+    profileId: publicText(summary.profileId),
+    profileName: publicText(summary.profileName),
+    sourceLabel: "CCSwitch",
+    providerKey: publicText(summary.providerKey),
+    baseURL: publicEndpoint(summary.baseURL),
+    api: publicText(summary.api),
+    modelCount: Number.isInteger(summary.modelCount) ? summary.modelCount : 0,
+    modelIds: Array.isArray(summary.modelIds) ? summary.modelIds.filter((id) => typeof id === "string").slice(0, 100) : [],
+    credential: summary.credential === "found" ? "found" : "missing",
+    reasoningEffort: SAFE_REASONING.has(summary.reasoningEffort) ? summary.reasoningEffort : void 0,
+    status: SAFE_STATUSES.has(summary.status) ? summary.status : "blocked",
+    warnings: publicWarnings(summary.warnings),
+    blockedReason: summary.blockedReason ? "source profile is blocked" : void 0
+  };
+}
+function publicResult(result) {
+  const status = SAFE_STATUSES.has(result?.status) ? result.status : "failed";
+  const output = {
+    profileId: publicText(result?.profileId),
+    profileName: publicText(result?.profileName),
+    providerKey: publicText(result?.providerKey),
+    status,
+    warnings: publicWarnings(result?.warnings)
+  };
+  if (status === "failed") output.error = "import failed";
+  if (status === "blocked") output.error = "profile blocked";
+  if (status === "skipped") output.skipReason = "profile was not selected or is not importable";
+  return output;
 }
 function writeJson(response, status, body) {
   response.writeHead(status, {
@@ -524,7 +594,7 @@ function writeJson(response, status, body) {
     "cache-control": "no-store",
     "referrer-policy": "no-referrer"
   });
-  response.end(JSON.stringify(publicValue(body)));
+  response.end(JSON.stringify(body));
 }
 async function readJsonBody(request) {
   const chunks = [];
@@ -572,9 +642,9 @@ function makeRoutes(deps = {}) {
         if (!methodFence(request, response, isLoopback, "GET")) return;
         try {
           const classified = classifyProfiles(await scan(), await getProviders());
-          writeJson(response, 200, { profiles: classified.map((item) => item.summary) });
-        } catch (error) {
-          writeJson(response, 500, { error: safeError2(error) });
+          writeJson(response, 200, { profiles: classified.map((item) => publicSummary(item.summary)) });
+        } catch {
+          writeJson(response, 500, { error: "scan failed" });
         }
       }
     },
@@ -600,9 +670,9 @@ function makeRoutes(deps = {}) {
             credentials,
             expectedRevision: body.expectedRevision
           });
-          writeJson(response, 200, { results });
-        } catch (error) {
-          writeJson(response, 500, { error: safeError2(error) });
+          writeJson(response, 200, { results: results.map(publicResult) });
+        } catch {
+          writeJson(response, 500, { error: "import failed" });
         }
       }
     }

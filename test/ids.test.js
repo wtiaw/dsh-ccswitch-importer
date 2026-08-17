@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { providerKey, credentialRef, credentialRefFor, variantKey } from '../lib/core/ids.js'
+import { providerKey, credentialRef, credentialRefFor, credentialRefForProviderKey, variantKey } from '../lib/core/ids.js'
 
 test('provider key is deterministic and namespaced', () => {
   const a = providerKey('星渡-1786264467316', '星渡')
@@ -29,6 +29,13 @@ test('credentialRefFor derives from a provider key', () => {
 test('credentialRefFor rejects non-8-hex tails (e.g. variant keys)', () => {
   assert.throws(() => credentialRefFor('ccs-provider-abcdef12-3456'), /8-hex/)
   assert.throws(() => credentialRefFor('ccs-provider-nohash'), /8-hex/)
+})
+
+test('resolved variant keys receive isolated credential refs', () => {
+  const variant = variantKey(providerKey('p-1', 'P'), 1)
+  const ref = credentialRefForProviderKey(variant)
+  assert.match(ref, /^DSH_CCSWITCH_[A-F0-9]{8}_API_KEY$/)
+  assert.notEqual(ref, credentialRef('p-1', 'P'))
 })
 
 test('variantKey appends a deterministic suffix', () => {

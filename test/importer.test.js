@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { importProfiles } from '../lib/core/importer.js'
 import { toProviderProfile } from '../lib/core/mapper.js'
-import { providerKey, credentialRef } from '../lib/core/ids.js'
+import { providerKey, credentialRef, credentialRefForProviderKey, variantKey } from '../lib/core/ids.js'
 
 function makeSettings(initial, revision = 7) {
   const state = { section: structuredClone(initial), revision }
@@ -77,6 +77,28 @@ test('import writes credential then settings and returns redacted results', asyn
   const result = results.find((r) => r.profileId === profile.profileId)
   assert.equal(result.status, 'new')
   assert.ok(!JSON.stringify(result).includes('sk-SECRET-1'))
+})
+
+test('collision import isolates the variant credential from the base provider', async () => {
+  const baseKey = providerKey(profile.profileId, profile.profileName)
+  const variant = variantKey(baseKey, 1)
+  const settings = makeSettings({
+    providers: {
+      [baseKey]: { displayName: '星渡', baseURL: 'https://different.example' },
+    },
+  })
+  const credentials = makeCredentials()
+  const baseRef = credentialRef(profile.profileId, profile.profileName)
+  const variantRef = credentialRefForProviderKey(variant)
+  credentials.store.set(baseRef, 'old-secret')
+
+  const results = await importProfiles({ profiles: [profile], selectedIds: [profile.profileId], settings, credentials })
+
+  assert.equal(credentials.store.get(baseRef), 'old-secret')
+  assert.equal(credentials.store.get(variantRef), 'sk-SECRET-1')
+  assert.equal(settings.state.section.providers[variant].apiKeyEnv, variantRef)
+  assert.equal(results[0].providerKey, variant)
+  assert.equal(results[0].status, 'new')
 })
 
 test('skips unselected profiles and does not touch credentials', async () => {

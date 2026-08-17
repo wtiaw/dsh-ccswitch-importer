@@ -16,6 +16,8 @@ const O_SERIES_REASONING = Object.freeze({
 
 export const KNOWN_REASONING_CATALOG = Object.freeze({
   "gpt-5.6-sol": GPT_56_REASONING,
+  "gpt-5.6-luna": GPT_56_REASONING,
+  "gpt-5.6-terra": GPT_56_REASONING,
   o1: O_SERIES_REASONING,
   "o1-pro": O_SERIES_REASONING,
   o3: O_SERIES_REASONING,
@@ -31,6 +33,5 @@ export function cloneReasoningEfforts(efforts) {
 export function knownReasoningFor(modelId) {
   if (typeof modelId !== "string") return undefined;
   const key = modelId.trim().toLowerCase();
-  if (["luna", "sol", "terra"].includes(key.replace("gpt-5.6-", ""))) return cloneReasoningEfforts(GPT_56_REASONING);
   return cloneReasoningEfforts(KNOWN_REASONING_CATALOG[key]);
 }

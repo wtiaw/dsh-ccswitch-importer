@@ -53,7 +53,11 @@ export function CCSwitchImportSection({ controller }) {
             h("span", { className: "dsh-ccswitch-import__meta" },
               h("strong", null, profile.profileName || profile.profileId),
               h("code", null, profile.baseURL || ""),
-              h("span", null, (profile.modelIds ?? []).join(", ") || "无模型"),
+              h("code", { className: "dsh-ccswitch-import__provider-key" }, profile.providerKey || "待生成 provider key"),
+              h("span", null, `${profile.credential === "found" ? "凭据已找到" : "缺少凭据"} · ${(profile.modelIds ?? []).join(", ") || "无模型"}`),
+              Array.isArray(profile.warnings) && profile.warnings.length > 0
+                ? h("span", { className: "dsh-ccswitch-import__warnings" }, profile.warnings.join("；"))
+                : null,
             ),
             h("span", { className: "dsh-ccswitch-import__status" }, statusLabel(profile.status)),
           );

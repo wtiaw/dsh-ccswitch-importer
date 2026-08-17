@@ -30,7 +30,7 @@ function withBody(request, body) {
 test('scan route returns redacted summaries without secrets', async () => {
   const routes = makeRoutes({
     scan: async () => [{
-      profileId: 'p-1', profileName: 'P1', baseURL: 'https://x/v1', api: 'openai-responses',
+      profileId: 'p-1', profileName: 'P1', baseURL: 'https://user:secret@example.test/v1?token=secret', api: 'openai-responses',
       models: [{ id: 'm' }], modelReasoningEffort: 'high', apiKey: 'sk-SECRET-X', warnings: [],
     }],
     getProviders: async () => ({}),
@@ -43,6 +43,19 @@ test('scan route returns redacted summaries without secrets', async () => {
   assert.ok(!JSON.stringify(body).includes('sk-SECRET-X'))
   assert.equal(body.profiles[0].credential, 'found')
   assert.equal(body.profiles[0].reasoningEffort, 'high')
+  assert.equal(body.profiles[0].baseURL, 'https://example.test/v1')
+  assert.ok(!JSON.stringify(body).includes('secret'))
+})
+
+test('route failures return fixed safe messages', async () => {
+  const routes = makeRoutes({
+    scan: async () => { throw new Error('provider token=not-sk-shaped-secret') },
+    isLoopback: () => true,
+  })
+  const route = routes.find((item) => item.path === '/api/dsh-ccswitch/scan')
+  const res = fakeRes()
+  await route.handler(fakeReq(), res)
+  assert.deepEqual(JSON.parse(res.calls.find((call) => call[0] === 'end')[1]), { error: 'scan failed' })
 })
 
 test('import route forwards only selected IDs and revision', async () => {
@@ -81,6 +94,6 @@ test('readJsonBody caps size and tolerates garbage', async () => {
   assert.deepEqual(await readJsonBody(ok), { a: 1 })
 })
 
-test('safeError redacts credential-shaped values', () => {
-  assert.equal(safeError(new Error('bad sk-SECRET-X')), 'bad sk-<redacted>')
+test('safeError returns a fixed message', () => {
+  assert.equal(safeError(new Error('bad sk-SECRET-X')), 'request failed')
 })

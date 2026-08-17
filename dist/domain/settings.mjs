@@ -15,6 +15,8 @@ var O_SERIES_REASONING = Object.freeze({
 });
 var KNOWN_REASONING_CATALOG = Object.freeze({
   "gpt-5.6-sol": GPT_56_REASONING,
+  "gpt-5.6-luna": GPT_56_REASONING,
+  "gpt-5.6-terra": GPT_56_REASONING,
   o1: O_SERIES_REASONING,
   "o1-pro": O_SERIES_REASONING,
   o3: O_SERIES_REASONING,
