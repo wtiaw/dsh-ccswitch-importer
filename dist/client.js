@@ -289,6 +289,11 @@ window.__ModuleLoader__.load({
 		    order: 10,
 		    inject: () => ({ controller, importer, slots: ctx.slots, t })
 		  }, component));
+		  const refreshImporter = () => {
+		    const result = importer?.scan?.();
+		    if (result?.catch) void result.catch(() => {
+		    });
+		  };
 		  const disposers = [
 		    ctx.remote.$on("settings/document-updated", () => {
 		      void controller.refresh();
@@ -296,9 +301,7 @@ window.__ModuleLoader__.load({
 		    ctx.remote.$on("llm/adapters-updated", () => {
 		      void controller.refresh();
 		    }),
-		    ctx.remote.$on("credentials/updated", () => {
-		      void importer?.scan?.();
-		    }),
+		    ctx.remote.$on("credentials/updated", refreshImporter),
 		    ctx.remote.$on("connection/reset", () => {
 		      void controller.refresh();
 		    })
@@ -444,7 +447,8 @@ window.__ModuleLoader__.load({
 		  if (!controller) return null;
 		  const snapshot = (0, import_react2.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 		  (0, import_react2.useEffect)(() => {
-		    if (snapshot.phase === "idle") void controller.scan();
+		    if (snapshot.phase === "idle") void controller.scan().catch(() => {
+		    });
 		  }, [controller, snapshot.phase]);
 		  const busy = snapshot.phase === "loading" || snapshot.phase === "importing";
 		  const selected = new Set(snapshot.selectedIds);
@@ -465,10 +469,12 @@ window.__ModuleLoader__.load({
 		        "div",
 		        { className: "dsh-ccswitch-import__actions" },
 		        h2("button", { type: "button", disabled: busy, onClick: () => {
-		          void controller.scan();
+		          void controller.scan().catch(() => {
+		          });
 		        } }, busy ? "\u5904\u7406\u4E2D..." : "\u626B\u63CF"),
 		        h2("button", { type: "button", disabled: busy || selected.size === 0, onClick: () => {
-		          void controller.importSelected();
+		          void controller.importSelected().catch(() => {
+		          });
 		        } }, "\u5BFC\u5165\u9009\u4E2D")
 		      )
 		    ),

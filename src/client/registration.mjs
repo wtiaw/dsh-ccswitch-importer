@@ -23,10 +23,14 @@ export function registerReasoningSettings(ctx, { controller, importer, component
     inject: () => ({ controller, importer, slots: ctx.slots, t }),
   }, component));
 
+  const refreshImporter = () => {
+    const result = importer?.scan?.();
+    if (result?.catch) void result.catch(() => {});
+  };
   const disposers = [
     ctx.remote.$on("settings/document-updated", () => { void controller.refresh(); }),
     ctx.remote.$on("llm/adapters-updated", () => { void controller.refresh(); }),
-    ctx.remote.$on("credentials/updated", () => { void importer?.scan?.(); }),
+    ctx.remote.$on("credentials/updated", refreshImporter),
     ctx.remote.$on("connection/reset", () => { void controller.refresh(); }),
   ];
   return () => disposers.forEach((dispose) => dispose());

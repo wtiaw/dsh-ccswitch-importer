@@ -18,7 +18,7 @@ export function CCSwitchImportSection({ controller }) {
   if (!controller) return null;
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => {
-    if (snapshot.phase === 'idle') void controller.scan();
+    if (snapshot.phase === 'idle') void controller.scan().catch(() => {});
   }, [controller, snapshot.phase]);
   const busy = snapshot.phase === "loading" || snapshot.phase === "importing";
   const selected = new Set(snapshot.selectedIds);
@@ -30,8 +30,8 @@ export function CCSwitchImportSection({ controller }) {
         h("p", { className: "dsh-ccswitch-import__hint" }, "从本机 CCSwitch 读取 provider 配置。"),
       ),
       h("div", { className: "dsh-ccswitch-import__actions" },
-        h("button", { type: "button", disabled: busy, onClick: () => { void controller.scan(); } }, busy ? "处理中..." : "扫描"),
-        h("button", { type: "button", disabled: busy || selected.size === 0, onClick: () => { void controller.importSelected(); } }, "导入选中"),
+        h("button", { type: "button", disabled: busy, onClick: () => { void controller.scan().catch(() => {}); } }, busy ? "处理中..." : "扫描"),
+        h("button", { type: "button", disabled: busy || selected.size === 0, onClick: () => { void controller.importSelected().catch(() => {}); } }, "导入选中"),
       ),
     ),
     snapshot.error && h("p", { role: "alert", className: "dsh-ccswitch-import__error" }, snapshot.error),
