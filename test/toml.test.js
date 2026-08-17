@@ -21,6 +21,7 @@ command = 'C:\\x.exe'
 `)
   assert.deepEqual(result, {
     model: 'gpt-5.6-terra',
+    reasoningEffort: 'xhigh',
     provider: {
       name: '星渡',
       baseUrl: 'https://aiwtiaw.top',
@@ -32,7 +33,7 @@ command = 'C:\\x.exe'
 
 test('returns null provider when no model_providers.custom section', () => {
   const result = parseCodexToml('model = "gpt-5"\n')
-  assert.deepEqual(result, { model: 'gpt-5', provider: null })
+  assert.deepEqual(result, { model: 'gpt-5', reasoningEffort: undefined, provider: null })
 })
 
 test('handles missing wire_api and requires_openai_auth', () => {
@@ -50,8 +51,8 @@ base_url = "http://localhost:8080/v1"
 })
 
 test('empty or non-toml input yields empty result', () => {
-  assert.deepEqual(parseCodexToml(''), { model: undefined, provider: null })
-  assert.deepEqual(parseCodexToml('not toml at all'), { model: undefined, provider: null })
+  assert.deepEqual(parseCodexToml(''), { model: undefined, reasoningEffort: undefined, provider: null })
+  assert.deepEqual(parseCodexToml('not toml at all'), { model: undefined, reasoningEffort: undefined, provider: null })
 })
 
 test('strips inline comments after values', () => {
@@ -63,6 +64,7 @@ requires_openai_auth = true # flag
 `)
   assert.deepEqual(result, {
     model: 'x',
+    reasoningEffort: undefined,
     provider: { name: 'n', baseUrl: 'http://localhost:8080/v1', wireApi: undefined, requiresOpenaiAuth: true },
   })
 })

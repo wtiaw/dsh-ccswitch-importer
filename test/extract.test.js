@@ -4,6 +4,7 @@ import { extractProfile } from '../lib/core/extract.js'
 
 const toml = `model_provider = "custom"
 model = "gpt-5.6-terra"
+model_reasoning_effort = "xhigh"
 [model_providers.custom]
 name = "星渡"
 base_url = "https://aiwtiaw.top"
@@ -26,6 +27,7 @@ test('extracts a full api-key profile', () => {
   assert.equal(profile.baseURL, 'https://aiwtiaw.top')
   assert.equal(profile.api, 'openai-responses')
   assert.deepEqual(profile.models, [{ id: 'gpt-5.6-terra' }])
+  assert.equal(profile.modelReasoningEffort, 'xhigh')
   assert.equal(profile.apiKey, 'sk-secret-value')
   assert.equal(profile.isCurrent, true)
   assert.deepEqual(profile.warnings, [])
