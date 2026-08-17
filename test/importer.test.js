@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { importProfiles } from '../lib/core/importer.js'
+import { toProviderProfile } from '../lib/core/mapper.js'
 import { providerKey, credentialRef } from '../lib/core/ids.js'
 
 function makeSettings(initial, revision = 7) {
@@ -42,6 +43,10 @@ function makeCredentials() {
     store,
     async set(ref, value) { store.set(ref, value) },
     async unset(ref) { store.delete(ref) },
+    async resolve(ref) {
+      const value = store.get(ref)
+      return value === undefined ? undefined : { value, source: 'file' }
+    },
   }
 }
 
@@ -116,6 +121,18 @@ test('settings conflict reports failure and rolls back the new credential', asyn
   assert.match(results[0].error, /conflict/i)
 })
 
+test('settings conflict restores an existing credential', async () => {
+  const settings = makeSettings({ providers: {} })
+  const credentials = makeCredentials()
+  const ref = credentialRef(profile.profileId, profile.profileName)
+  credentials.store.set(ref, 'old-secret')
+  const results = await importProfiles({
+    profiles: [profile], selectedIds: [profile.profileId], settings, credentials, expectedRevision: 99,
+  })
+  assert.equal(credentials.store.get(ref), 'old-secret')
+  assert.equal(results[0].status, 'failed')
+})
+
 test('unchanged profile is reported and not rewritten', async () => {
   const key = providerKey(profile.profileId, profile.profileName)
   const ref = credentialRef(profile.profileId, profile.profileName)
@@ -123,7 +140,7 @@ test('unchanged profile is reported and not rewritten', async () => {
     providers: {
       // An entry this importer previously wrote: toProviderProfile shape,
       // apiKeyEnv included (see mapper.test.js for the same convention).
-      [key]: { displayName: '星渡', baseURL: 'https://aiwtiaw.top', api: 'openai-responses', apiKeyEnv: ref, models: [{ id: 'gpt-5.6-terra' }] },
+      [key]: toProviderProfile(profile),
     },
   })
   const credentials = makeCredentials()

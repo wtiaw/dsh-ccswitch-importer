@@ -10,6 +10,7 @@ const profile = {
   baseURL: 'https://aiwtiaw.top',
   api: 'openai-responses',
   models: [{ id: 'gpt-5.6-terra' }],
+  modelReasoningEffort: 'high',
   apiKey: 'sk-SUPER-SECRET',
   warnings: [],
   unsupported: [],
@@ -21,11 +22,32 @@ test('toProviderProfile maps to llm-pi-ai shape with apiKeyEnv only', () => {
   assert.equal(mapped.displayName, '星渡')
   assert.equal(mapped.baseURL, 'https://aiwtiaw.top')
   assert.equal(mapped.api, 'openai-responses')
-  assert.deepEqual(mapped.models, [{ id: 'gpt-5.6-terra' }])
+  assert.equal(mapped.models[0].id, 'gpt-5.6-terra')
+  assert.equal(mapped.models[0].reasoningEfforts.high, 'high')
+  assert.equal(mapped.reasoning, 'high')
   // llm-pi-ai's apiKeyEnv is a credential reference (env-var name), derived from
   // the provider key via credentialRefFor — never a bare hash, never the key itself.
   assert.equal(mapped.apiKeyEnv, credentialRefFor(key))
   assert.ok(!JSON.stringify(mapped).includes('sk-SUPER-SECRET'))
+})
+
+test('preserves manual provider and model fields on re-import', () => {
+  const key = providerKey(profile.profileId, profile.profileName)
+  const existing = {
+    displayName: '星渡',
+    baseURL: 'https://old.example',
+    api: 'openai-responses',
+    apiKeyEnv: credentialRefFor(key),
+    reasoning: 'low',
+    headers: { 'x-user': 'keep' },
+    models: [{ id: 'gpt-5.6-terra', reasoningEfforts: { low: 'low' }, maxTokens: 2048 }],
+  }
+  const mapped = toProviderProfile(profile, existing)
+  assert.equal(mapped.baseURL, 'https://aiwtiaw.top')
+  assert.equal(mapped.reasoning, 'low')
+  assert.deepEqual(mapped.headers, { 'x-user': 'keep' })
+  assert.deepEqual(mapped.models[0].reasoningEfforts, { low: 'low' })
+  assert.equal(mapped.models[0].maxTokens, 2048)
 })
 
 test('redactSummary never contains the api key', () => {
