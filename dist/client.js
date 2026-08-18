@@ -352,12 +352,13 @@ window.__ModuleLoader__.load({
 		    }
 		  };
 		  const modelName = model.name || model.id;
+		  const selectedCount = Object.keys(efforts).length;
 		  return h(
 		    "article",
 		    { className: "dsh-reasoning-model" },
 		    h(
-		      "div",
-		      { className: "dsh-reasoning-model__top" },
+		      "header",
+		      { className: "dsh-reasoning-model__header" },
 		      h(
 		        "div",
 		        { className: "dsh-reasoning-model__identity" },
@@ -366,7 +367,8 @@ window.__ModuleLoader__.load({
 		      ),
 		      h(
 		        "div",
-		        { className: "dsh-reasoning-model__actions" },
+		        { className: "dsh-reasoning-model__mode-area" },
+		        h("span", { className: "dsh-reasoning-model__mode-label" }, "\u63A8\u7406\u6A21\u5F0F"),
 		        h(
 		          "div",
 		          { className: "dsh-reasoning-mode", role: "group", "aria-label": `${model.id} \u63A8\u7406\u6A21\u5F0F` },
@@ -384,61 +386,78 @@ window.__ModuleLoader__.load({
 		            disabled: !writable,
 		            onClick: () => setMode("enabled")
 		          }, "\u542F\u7528")
-		        ),
-		        h("button", { className: "dsh-reasoning-save", type: "button", disabled: !writable || status === "saving", onClick: save }, status === "saving" ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58"),
-		        status && status !== "saving" && h("span", { role: "status", className: status === "saved" ? "dsh-reasoning-status dsh-reasoning-status--success" : "dsh-reasoning-status dsh-reasoning-status--error" }, displayStatus(status))
+		        )
 		      )
 		    ),
 		    mode === "enabled" && h(
 		      "div",
-		      { className: "dsh-reasoning-levels", "aria-label": `${model.id} \u53EF\u7528\u63A8\u7406\u7B49\u7EA7` },
-		      h("span", { className: "dsh-reasoning-levels__label" }, "\u53EF\u7528\u7B49\u7EA7"),
-		      ...LEVELS.map((level) => {
-		        const checked = Object.hasOwn(efforts, level);
-		        return h(
-		          "label",
-		          { key: level, className: "dsh-reasoning-level" + (checked ? " dsh-reasoning-level--active" : "") },
-		          h("input", {
-		            type: "checkbox",
-		            checked,
-		            disabled: !writable,
-		            onChange: (event) => toggleLevel(level, event.target.checked)
-		          }),
-		          h("span", null, level)
-		        );
-		      })
-		    ),
-		    mode === "enabled" && h(
-		      "div",
-		      { className: "dsh-reasoning-custom" },
+		      { className: "dsh-reasoning-model__body" },
 		      h(
-		        "button",
-		        {
-		          type: "button",
-		          className: "dsh-reasoning-custom__toggle",
-		          "aria-expanded": customOpen,
-		          onClick: () => setCustomOpen((current) => !current)
-		        },
-		        customOpen ? "\u6536\u8D77\u81EA\u5B9A\u4E49\u6620\u5C04" : "\u81EA\u5B9A\u4E49 wire \u503C",
-		        h("span", { "aria-hidden": "true" }, customOpen ? "\u2303" : "\u2304")
-		      ),
-		      customOpen && h(
 		        "div",
-		        { className: "dsh-reasoning-custom__body" },
-		        ...LEVELS.filter((level) => Object.hasOwn(efforts, level)).map((level) => h(
-		          "label",
-		          { key: level, className: "dsh-reasoning-custom__field" },
-		          h("span", null, level === "off" ? "off" : level),
-		          h("input", {
-		            type: "text",
-		            value: efforts[level] ?? "",
-		            placeholder: level === "off" ? "\u7559\u7A7A\u8868\u793A null" : level,
-		            disabled: !writable,
-		            onChange: (event) => setEfforts((current) => ({ ...current, [level]: event.target.value })),
-		            "aria-label": `${model.id} ${level} wire \u503C`
+		        { className: "dsh-reasoning-levels", "aria-label": `${model.id} \u53EF\u7528\u63A8\u7406\u7B49\u7EA7` },
+		        h(
+		          "div",
+		          { className: "dsh-reasoning-levels__heading" },
+		          h("span", { className: "dsh-reasoning-levels__label" }, "\u53EF\u7528\u7B49\u7EA7"),
+		          h("span", { className: "dsh-reasoning-levels__summary" }, `\u5DF2\u9009 ${selectedCount} \u9879`)
+		        ),
+		        h(
+		          "div",
+		          { className: "dsh-reasoning-levels__options" },
+		          ...LEVELS.map((level) => {
+		            const checked = Object.hasOwn(efforts, level);
+		            return h(
+		              "label",
+		              { key: level, className: "dsh-reasoning-level" + (checked ? " dsh-reasoning-level--active" : "") },
+		              h("input", {
+		                type: "checkbox",
+		                checked,
+		                disabled: !writable,
+		                onChange: (event) => toggleLevel(level, event.target.checked)
+		              }),
+		              h("span", null, level)
+		            );
 		          })
-		        ))
+		        )
+		      ),
+		      h(
+		        "div",
+		        { className: "dsh-reasoning-custom" },
+		        h(
+		          "button",
+		          {
+		            type: "button",
+		            className: customOpen ? "dsh-reasoning-custom__toggle dsh-reasoning-custom__toggle--active" : "dsh-reasoning-custom__toggle",
+		            "aria-expanded": customOpen,
+		            onClick: () => setCustomOpen((current) => !current)
+		          },
+		          h("span", null, customOpen ? "\u6536\u8D77\u81EA\u5B9A\u4E49\u6620\u5C04" : "\u81EA\u5B9A\u4E49 wire \u503C"),
+		          h("span", { "aria-hidden": "true" }, customOpen ? "\u2303" : "\u2304")
+		        ),
+		        customOpen && h(
+		          "div",
+		          { className: "dsh-reasoning-custom__body" },
+		          ...LEVELS.filter((level) => Object.hasOwn(efforts, level)).map((level) => h(
+		            "label",
+		            { key: level, className: "dsh-reasoning-custom__field" },
+		            h("span", null, level === "off" ? "off" : level),
+		            h("input", {
+		              type: "text",
+		              value: efforts[level] ?? "",
+		              placeholder: level === "off" ? "\u7559\u7A7A\u8868\u793A null" : level,
+		              disabled: !writable,
+		              onChange: (event) => setEfforts((current) => ({ ...current, [level]: event.target.value })),
+		              "aria-label": `${model.id} ${level} wire \u503C`
+		            })
+		          ))
+		        )
 		      )
+		    ),
+		    h(
+		      "footer",
+		      { className: "dsh-reasoning-model__footer" },
+		      status && status !== "saving" && h("span", { role: "status", className: status === "saved" ? "dsh-reasoning-status dsh-reasoning-status--success" : "dsh-reasoning-status dsh-reasoning-status--error" }, displayStatus(status)),
+		      h("button", { className: "dsh-reasoning-save", type: "button", disabled: !writable || status === "saving", onClick: save }, status === "saving" ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58")
 		    )
 		  );
 		}
@@ -629,41 +648,50 @@ window.__ModuleLoader__.load({
 		.dsh-reasoning-provider__header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 0 8px;border-bottom:1px solid var(--dsw-alias-border-l2);}
 		.dsh-reasoning-provider__header h3{margin:0;color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;line-height:20px;overflow-wrap:anywhere;}
 		.dsh-reasoning-provider__header span{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;white-space:nowrap;}
-		.dsh-reasoning-provider__models{display:flex;flex-direction:column;}
-		.dsh-reasoning-model{position:relative;padding:12px 0;border-bottom:1px solid var(--dsw-alias-border-l2);}
-		.dsh-reasoning-model__top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;}
-		.dsh-reasoning-model__identity{display:flex;align-items:baseline;gap:8px;min-width:0;}
+		.dsh-reasoning-provider__models{display:flex;flex-direction:column;gap:10px;padding-top:10px;}
+		.dsh-reasoning-model{position:relative;min-width:0;overflow:hidden;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);}
+		.dsh-reasoning-model__header{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0;padding:12px;}
+		.dsh-reasoning-model__identity{display:flex;flex-direction:column;gap:1px;min-width:0;}
 		.dsh-reasoning-model__identity strong{min-width:0;color:var(--dsw-alias-label-primary);font-size:14px;font-weight:500;line-height:22px;overflow-wrap:anywhere;}
 		.dsh-reasoning-model__identity code{min-width:0;color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code,monospace);font-size:12px;line-height:18px;overflow-wrap:anywhere;}
-		.dsh-reasoning-model__actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:none;}
+		.dsh-reasoning-model__mode-area{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:none;}
+		.dsh-reasoning-model__mode-label{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:18px;white-space:nowrap;}
 		.dsh-reasoning-mode{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);}
-		.dsh-reasoning-mode__option{min-width:38px;height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}
+		.dsh-reasoning-mode__option{min-width:40px;height:28px;padding:0 9px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}
 		.dsh-reasoning-mode__option:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
 		.dsh-reasoning-mode__option--active{background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);}
 		.dsh-reasoning-mode__option--active:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);color:var(--dsw-alias-label-primary-foreground);}
 		.dsh-reasoning-save,.dsh-ccswitch-import__primary{box-sizing:border-box;min-height:28px;padding:0 10px;border:0;border-radius:14px;background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}
+		.dsh-reasoning-save{min-width:64px;border-radius:7px;}
 		.dsh-reasoning-save:hover:not(:disabled),.dsh-ccswitch-import__primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);}
 		.dsh-reasoning-save:disabled,.dsh-ccswitch-import__primary:disabled,.dsh-ccswitch-import__secondary:disabled,.dsh-reasoning-mode__option:disabled{opacity:.4;cursor:default;}
 		.dsh-reasoning-save:focus-visible,.dsh-ccswitch-import__primary:focus-visible,.dsh-ccswitch-import__secondary:focus-visible,.dsh-reasoning-mode__option:focus-visible,.dsh-reasoning-custom__toggle:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
 		.dsh-reasoning-status{display:inline-flex;align-items:center;min-height:20px;box-sizing:border-box;padding:1px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;font-size:11px;font-weight:500;line-height:18px;white-space:nowrap;}
 		.dsh-reasoning-status--success{color:var(--dsw-alias-state-success-primary);}
-		.dsh-reasoning-status--error{max-width:180px;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;white-space:normal;}
-		.dsh-reasoning-model__mode{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
-		.dsh-reasoning-levels{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:10px 0 0;padding-left:2px;}
-		.dsh-reasoning-levels__label{margin-right:2px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:28px;}
-		.dsh-reasoning-level{position:relative;display:inline-flex;align-items:center;min-height:28px;padding:0 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;cursor:pointer;}
-		.dsh-reasoning-level:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
+		.dsh-reasoning-status--error{max-width:240px;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;white-space:normal;}
+		.dsh-reasoning-model__body{min-width:0;padding:12px;border-top:1px solid var(--dsw-alias-border-l2);}
+		.dsh-reasoning-levels{display:flex;flex-direction:column;gap:8px;min-width:0;}
+		.dsh-reasoning-levels__heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;}
+		.dsh-reasoning-levels__label{color:var(--dsw-alias-label-secondary);font-size:12px;font-weight:500;line-height:18px;}
+		.dsh-reasoning-levels__summary{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:18px;white-space:nowrap;}
+		.dsh-reasoning-levels__options{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;}
+		.dsh-reasoning-level{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:28px;box-sizing:border-box;padding:0 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;cursor:pointer;}
+		.dsh-reasoning-level:hover:not(:has(input:disabled)){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
 		.dsh-reasoning-level--active{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-state-business-tertiary);color:var(--dsw-alias-label-primary);}
+		.dsh-reasoning-level:focus-within{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
 		.dsh-reasoning-level:has(input:disabled){cursor:default;opacity:.6;}
-		.dsh-reasoning-level input{position:absolute;opacity:0;pointer-events:none;}
-		.dsh-reasoning-custom{margin:10px 0 0;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l2);}
-		.dsh-reasoning-custom__toggle{display:inline-flex;align-items:center;gap:6px;margin-left:-4px;padding:2px 6px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}
+		.dsh-reasoning-level input{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;}
+		.dsh-reasoning-custom{margin-top:12px;padding-top:10px;border-top:1px solid var(--dsw-alias-border-l2);}
+		.dsh-reasoning-custom__toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:32px;box-sizing:border-box;padding:6px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:transparent;color:var(--dsw-alias-label-tertiary);font-family:inherit;font-size:12px;line-height:18px;text-align:left;cursor:pointer;}
 		.dsh-reasoning-custom__toggle:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
-		.dsh-reasoning-custom__body{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:10px 0 2px;}
-		.dsh-reasoning-custom__field{display:flex;flex-direction:column;gap:4px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;}
+		.dsh-reasoning-custom__toggle--active{border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
+		.dsh-reasoning-custom__toggle>span:last-child{flex:none;font-size:14px;line-height:18px;}
+		.dsh-reasoning-custom__body{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:10px 2px 0;}
+		.dsh-reasoning-custom__field{display:flex;flex-direction:column;gap:4px;min-width:0;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;}
 		.dsh-reasoning-custom__field input{box-sizing:border-box;width:100%;height:30px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:12px;line-height:18px;}
-		.dsh-reasoning-custom__field input:focus{border-color:var(--dsw-alias-brand-primary);outline:none;}
+		.dsh-reasoning-custom__field input:focus{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
 		.dsh-reasoning-custom__field input::placeholder{color:var(--dsw-alias-label-dimmed);}
+		.dsh-reasoning-model__footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0;padding:10px 12px;border-top:1px solid var(--dsw-alias-border-l2);}
 		.dsh-ccswitch-import{border-top:1px solid var(--dsw-alias-border-l2);padding-top:16px;color:var(--dsw-alias-label-primary);}
 		.dsh-ccswitch-import__header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}
 		.dsh-ccswitch-import__title{margin:0 0 4px;color:var(--dsw-alias-label-primary);font-size:16px;font-weight:500;line-height:24px;}
@@ -690,7 +718,7 @@ window.__ModuleLoader__.load({
 		.dsh-ccswitch-import__badge--blocked{color:var(--dsw-alias-label-dimmed);}
 		.dsh-ccswitch-import__error{margin:0 0 12px;color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px;}
 		.dsh-ccswitch-import__results{margin:12px 0 0;padding-left:20px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;}
-		@media (max-width:640px){[role='dialog']:has(.dsh-ccswitch-import)>nav{flex:0 0 56px;width:56px;min-width:56px;}[role='dialog']:has(.dsh-ccswitch-import)>nav button{width:40px;min-width:40px;padding:0;justify-content:center;}[role='dialog']:has(.dsh-ccswitch-import)>nav button>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}[role='dialog']:has(.dsh-ccswitch-import)>div{min-width:0;}.dsh-ccswitch-import__header{flex-direction:column;}.dsh-ccswitch-import__actions{width:100%;flex-direction:column;align-items:stretch;}.dsh-ccswitch-import__actions button{width:100%;}.dsh-ccswitch-import__row{grid-template-columns:auto minmax(0,1fr);min-width:0;}.dsh-ccswitch-import__content{min-width:0;}.dsh-ccswitch-import__badge{grid-column:2;justify-self:start;}.dsh-reasoning-model__top{align-items:stretch;flex-direction:column;}.dsh-reasoning-model__actions{justify-content:flex-start;flex-wrap:wrap;}.dsh-reasoning-save{flex:1;}.dsh-reasoning-levels{align-items:flex-start;}.dsh-reasoning-levels__label{width:100%;line-height:18px;}.dsh-reasoning-custom__body{grid-template-columns:minmax(0,1fr);}}`;
+		@media (max-width:640px){[role='dialog']:has(.dsh-ccswitch-import)>nav{flex:0 0 56px;width:56px;min-width:56px;}[role='dialog']:has(.dsh-ccswitch-import)>nav button{width:40px;min-width:40px;padding:0;justify-content:center;}[role='dialog']:has(.dsh-ccswitch-import)>nav button>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}[role='dialog']:has(.dsh-ccswitch-import)>div{min-width:0;}.dsh-ccswitch-import__header{flex-direction:column;}.dsh-ccswitch-import__actions{width:100%;flex-direction:column;align-items:stretch;}.dsh-ccswitch-import__actions button{width:100%;}.dsh-ccswitch-import__row{grid-template-columns:auto minmax(0,1fr);min-width:0;}.dsh-ccswitch-import__content{min-width:0;}.dsh-ccswitch-import__badge{grid-column:2;justify-self:start;}.dsh-reasoning-model__header{align-items:stretch;flex-direction:column;gap:10px;padding:10px;}.dsh-reasoning-model__mode-area{width:100%;justify-content:space-between;}.dsh-reasoning-model__body{padding:10px;}.dsh-reasoning-model__footer{padding:9px 10px;}.dsh-reasoning-levels__heading{align-items:flex-start;}.dsh-reasoning-levels__options{gap:6px;}.dsh-reasoning-custom__body{grid-template-columns:minmax(0,1fr);}}`;
 		function installEmbedStyles() {
 		  if (typeof document === "undefined") return () => {
 		  };
