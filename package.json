@@ -1,6 +1,6 @@
 {
   "name": "dsh-ccswitch-importer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Import CC Switch Codex profiles and configure per-model reasoning in DSH.",
   "type": "module",
   "main": "dist/index.mjs",
