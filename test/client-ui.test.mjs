@@ -38,12 +38,17 @@ test('reasoning editor separates mode, effort, advanced, and save hierarchy', as
   assert.match(ui, /dsh-reasoning-levels__summary/)
   assert.match(ui, /已选 \$\{selectedCount\} 项/)
   assert.match(ui, /dsh-reasoning-custom__toggle--active/)
+  assert.match(ui, /const customBodyId =/)
+  assert.match(ui, /"aria-controls": customBodyId/)
+  assert.match(ui, /id: customBodyId/)
   assert.match(ui, /controller\.save\(route, model\.id, mode, efforts\)/)
   assert.match(styles, /\.dsh-reasoning-model\{[^}]*border-radius:8px/)
   assert.match(styles, /\.dsh-reasoning-model__footer\{[^}]*justify-content:flex-end/)
+  assert.match(styles, /\.dsh-reasoning-model__footer\{[^}]*flex-wrap:wrap/)
   assert.match(styles, /\.dsh-reasoning-levels__options\{[^}]*flex-wrap:wrap/)
   assert.match(styles, /\.dsh-reasoning-custom__toggle\{[^}]*width:100%/)
   assert.match(styles, /\.dsh-reasoning-model__header\{[^}]*min-width:0/)
+  assert.match(styles, /\.dsh-reasoning-status\{[^}]*min-width:0/)
 })
 
 test('import rows use compact two-line structure and status badges', async () => {

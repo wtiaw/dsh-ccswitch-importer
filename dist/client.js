@@ -353,6 +353,7 @@ window.__ModuleLoader__.load({
 		  };
 		  const modelName = model.name || model.id;
 		  const selectedCount = Object.keys(efforts).length;
+		  const customBodyId = `dsh-reasoning-custom-${route}-${model.id}`.replace(/[^a-zA-Z0-9_-]/g, "-");
 		  return h(
 		    "article",
 		    { className: "dsh-reasoning-model" },
@@ -429,6 +430,7 @@ window.__ModuleLoader__.load({
 		            type: "button",
 		            className: customOpen ? "dsh-reasoning-custom__toggle dsh-reasoning-custom__toggle--active" : "dsh-reasoning-custom__toggle",
 		            "aria-expanded": customOpen,
+		            "aria-controls": customBodyId,
 		            onClick: () => setCustomOpen((current) => !current)
 		          },
 		          h("span", null, customOpen ? "\u6536\u8D77\u81EA\u5B9A\u4E49\u6620\u5C04" : "\u81EA\u5B9A\u4E49 wire \u503C"),
@@ -436,7 +438,7 @@ window.__ModuleLoader__.load({
 		        ),
 		        customOpen && h(
 		          "div",
-		          { className: "dsh-reasoning-custom__body" },
+		          { id: customBodyId, className: "dsh-reasoning-custom__body" },
 		          ...LEVELS.filter((level) => Object.hasOwn(efforts, level)).map((level) => h(
 		            "label",
 		            { key: level, className: "dsh-reasoning-custom__field" },
@@ -666,7 +668,7 @@ window.__ModuleLoader__.load({
 		.dsh-reasoning-save:hover:not(:disabled),.dsh-ccswitch-import__primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);}
 		.dsh-reasoning-save:disabled,.dsh-ccswitch-import__primary:disabled,.dsh-ccswitch-import__secondary:disabled,.dsh-reasoning-mode__option:disabled{opacity:.4;cursor:default;}
 		.dsh-reasoning-save:focus-visible,.dsh-ccswitch-import__primary:focus-visible,.dsh-ccswitch-import__secondary:focus-visible,.dsh-reasoning-mode__option:focus-visible,.dsh-reasoning-custom__toggle:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
-		.dsh-reasoning-status{display:inline-flex;align-items:center;min-height:20px;box-sizing:border-box;padding:1px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;font-size:11px;font-weight:500;line-height:18px;white-space:nowrap;}
+		.dsh-reasoning-status{display:inline-flex;align-items:center;min-width:0;max-width:100%;min-height:20px;box-sizing:border-box;padding:1px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;font-size:11px;font-weight:500;line-height:18px;white-space:nowrap;}
 		.dsh-reasoning-status--success{color:var(--dsw-alias-state-success-primary);}
 		.dsh-reasoning-status--error{max-width:240px;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;white-space:normal;}
 		.dsh-reasoning-model__body{min-width:0;padding:12px;border-top:1px solid var(--dsw-alias-border-l2);}
@@ -691,7 +693,7 @@ window.__ModuleLoader__.load({
 		.dsh-reasoning-custom__field input{box-sizing:border-box;width:100%;height:30px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:12px;line-height:18px;}
 		.dsh-reasoning-custom__field input:focus{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
 		.dsh-reasoning-custom__field input::placeholder{color:var(--dsw-alias-label-dimmed);}
-		.dsh-reasoning-model__footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0;padding:10px 12px;border-top:1px solid var(--dsw-alias-border-l2);}
+		.dsh-reasoning-model__footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0;padding:10px 12px;border-top:1px solid var(--dsw-alias-border-l2);}
 		.dsh-ccswitch-import{border-top:1px solid var(--dsw-alias-border-l2);padding-top:16px;color:var(--dsw-alias-label-primary);}
 		.dsh-ccswitch-import__header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}
 		.dsh-ccswitch-import__title{margin:0 0 4px;color:var(--dsw-alias-label-primary);font-size:16px;font-weight:500;line-height:24px;}

@@ -44,6 +44,7 @@ function ModelEditor({ route, model, controller, writable }) {
 
   const modelName = model.name || model.id;
   const selectedCount = Object.keys(efforts).length;
+  const customBodyId = `dsh-reasoning-custom-${route}-${model.id}`.replace(/[^a-zA-Z0-9_-]/g, "-");
   return h("article", { className: "dsh-reasoning-model" },
     h("header", { className: "dsh-reasoning-model__header" },
       h("div", { className: "dsh-reasoning-model__identity" },
@@ -96,10 +97,11 @@ function ModelEditor({ route, model, controller, writable }) {
           type: "button",
           className: customOpen ? "dsh-reasoning-custom__toggle dsh-reasoning-custom__toggle--active" : "dsh-reasoning-custom__toggle",
           "aria-expanded": customOpen,
+          "aria-controls": customBodyId,
           onClick: () => setCustomOpen((current) => !current),
         }, h("span", null, customOpen ? "收起自定义映射" : "自定义 wire 值"),
         h("span", { "aria-hidden": "true" }, customOpen ? "⌃" : "⌄")),
-        customOpen && h("div", { className: "dsh-reasoning-custom__body" },
+        customOpen && h("div", { id: customBodyId, className: "dsh-reasoning-custom__body" },
           ...LEVELS.filter((level) => Object.hasOwn(efforts, level)).map((level) => h("label", { key: level, className: "dsh-reasoning-custom__field" },
             h("span", null, level === "off" ? "off" : level),
             h("input", {
