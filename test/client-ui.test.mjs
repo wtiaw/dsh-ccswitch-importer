@@ -25,3 +25,17 @@ test('reasoning editor exposes compact list and collapsed wire mapping hooks', a
   assert.match(styles, /dsh-reasoning-mode/)
   assert.match(styles, /dsh-reasoning-custom/)
 })
+
+test('import rows use compact two-line structure and status badges', async () => {
+  const importer = await readFile(new URL('src/ui/CCSwitchImportSection.mjs', root), 'utf8')
+  const styles = await readFile(new URL('src/client/styles.mjs', root), 'utf8')
+  assert.match(importer, /dsh-ccswitch-import__content/)
+  assert.match(importer, /dsh-ccswitch-import__primary-line/)
+  assert.match(importer, /dsh-ccswitch-import__meta-line/)
+  assert.match(importer, /dsh-ccswitch-import__badge--\$\{safe\}/)
+  assert.doesNotMatch(importer, /dsh-ccswitch-import__meta"/)
+  assert.doesNotMatch(importer, /dsh-ccswitch-import__status/)
+  assert.match(styles, /\.dsh-ccswitch-import__badge\{[^}]*border-radius:999px/)
+  assert.match(styles, /\.dsh-ccswitch-import__badge--new/)
+  assert.match(styles, /\.dsh-ccswitch-import__badge--blocked/)
+})
