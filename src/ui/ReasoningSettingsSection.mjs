@@ -72,15 +72,18 @@ function ModelEditor({ route, model, controller, writable }) {
     ),
     mode === "enabled" && h("div", { className: "dsh-reasoning-levels", "aria-label": `${model.id} 可用推理等级` },
       h("span", { className: "dsh-reasoning-levels__label" }, "可用等级"),
-      ...LEVELS.map((level) => h("label", { key: level, className: "dsh-reasoning-level" },
-        h("input", {
-          type: "checkbox",
-          checked: Object.hasOwn(efforts, level),
-          disabled: !writable,
-          onChange: (event) => toggleLevel(level, event.target.checked),
-        }),
-        h("span", null, level),
-      )),
+      ...LEVELS.map((level) => {
+        const checked = Object.hasOwn(efforts, level);
+        return h("label", { key: level, className: "dsh-reasoning-level" + (checked ? " dsh-reasoning-level--active" : "") },
+          h("input", {
+            type: "checkbox",
+            checked,
+            disabled: !writable,
+            onChange: (event) => toggleLevel(level, event.target.checked),
+          }),
+          h("span", null, level),
+        );
+      }),
     ),
     mode === "enabled" && h("div", { className: "dsh-reasoning-custom" },
       h("button", {

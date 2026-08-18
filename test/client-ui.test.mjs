@@ -39,3 +39,11 @@ test('import rows use compact two-line structure and status badges', async () =>
   assert.match(styles, /\.dsh-ccswitch-import__badge--new/)
   assert.match(styles, /\.dsh-ccswitch-import__badge--blocked/)
 })
+
+test('reasoning pills and save status use unified badge styling', async () => {
+  const ui = await readFile(new URL('src/ui/ReasoningSettingsSection.mjs', root), 'utf8')
+  const styles = await readFile(new URL('src/client/styles.mjs', root), 'utf8')
+  assert.match(ui, /dsh-reasoning-level--active/)
+  assert.match(styles, /\.dsh-reasoning-level--active\{[^}]*--dsw-alias-brand-primary/)
+  assert.match(styles, /\.dsh-reasoning-status\{[^}]*border-radius:999px/)
+})
