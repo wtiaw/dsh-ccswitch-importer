@@ -47,3 +47,12 @@ test('reasoning pills and save status use unified badge styling', async () => {
   assert.match(styles, /\.dsh-reasoning-level--active\{[^}]*--dsw-alias-brand-primary/)
   assert.match(styles, /\.dsh-reasoning-status\{[^}]*border-radius:999px/)
 })
+
+test('importer keeps the settings content usable on narrow screens', async () => {
+  const styles = await readFile(new URL('src/client/styles.mjs', root), 'utf8')
+  assert.match(styles, /\[role='dialog'\]:has\(\.dsh-ccswitch-import\)>nav\{[^}]*width:56px/)
+  assert.match(styles, /\[role='dialog'\]:has\(\.dsh-ccswitch-import\)>nav button\{[^}]*width:40px/)
+  assert.match(styles, /\[role='dialog'\]:has\(\.dsh-ccswitch-import\)>nav button>span\{[^}]*clip:rect/)
+  assert.match(styles, /\.dsh-ccswitch-import__row\{[^}]*min-width:0/)
+  assert.match(styles, /\.dsh-ccswitch-import__content\{[^}]*min-width:0/)
+})
