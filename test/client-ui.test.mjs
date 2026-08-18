@@ -26,6 +26,26 @@ test('reasoning editor exposes compact list and collapsed wire mapping hooks', a
   assert.match(styles, /dsh-reasoning-custom/)
 })
 
+test('reasoning editor separates mode, effort, advanced, and save hierarchy', async () => {
+  const ui = await readFile(new URL('src/ui/ReasoningSettingsSection.mjs', root), 'utf8')
+  const styles = await readFile(new URL('src/client/styles.mjs', root), 'utf8')
+  assert.match(ui, /dsh-reasoning-model__header/)
+  assert.match(ui, /dsh-reasoning-model__mode-area/)
+  assert.match(ui, /dsh-reasoning-model__body/)
+  assert.match(ui, /dsh-reasoning-model__footer/)
+  assert.match(ui, /dsh-reasoning-levels__heading/)
+  assert.match(ui, /dsh-reasoning-levels__options/)
+  assert.match(ui, /dsh-reasoning-levels__summary/)
+  assert.match(ui, /已选 \$\{selectedCount\} 项/)
+  assert.match(ui, /dsh-reasoning-custom__toggle--active/)
+  assert.match(ui, /controller\.save\(route, model\.id, mode, efforts\)/)
+  assert.match(styles, /\.dsh-reasoning-model\{[^}]*border-radius:8px/)
+  assert.match(styles, /\.dsh-reasoning-model__footer\{[^}]*justify-content:flex-end/)
+  assert.match(styles, /\.dsh-reasoning-levels__options\{[^}]*flex-wrap:wrap/)
+  assert.match(styles, /\.dsh-reasoning-custom__toggle\{[^}]*width:100%/)
+  assert.match(styles, /\.dsh-reasoning-model__header\{[^}]*min-width:0/)
+})
+
 test('import rows use compact two-line structure and status badges', async () => {
   const importer = await readFile(new URL('src/ui/CCSwitchImportSection.mjs', root), 'utf8')
   const styles = await readFile(new URL('src/client/styles.mjs', root), 'utf8')
