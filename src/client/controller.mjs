@@ -32,13 +32,14 @@ export function createReasoningSettingsController(api) {
       }
       return snapshot;
     },
-    save: async (route, modelId, mode, efforts) => {
+    save: async (route, modelId, mode, efforts, expectedRevision = snapshot.revision) => {
       const before = snapshot.providers[route];
       const after = updateModelReasoning(before, modelId, mode, efforts);
       const mutation = settingsMutation(route, before, after);
-      const response = await api.settings.mutate({ ...mutation, expectedRevision: snapshot.revision });
+      const response = await api.settings.mutate({ ...mutation, expectedRevision });
       if (!response.result.ok) throw new Error(response.result.error.message);
       await controller.refresh();
+      return controller.getSnapshot();
     },
   };
   return controller;
