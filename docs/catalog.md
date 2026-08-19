@@ -30,7 +30,14 @@ Market Host 的受限 HTTP client 会**强制校验响应 `Content-Type` 为 `ap
 
 ### Cloudflare Pages
 
-把生成的两个文件放入部署目录，并添加以下文件：
+一键部署（需先完成一次 `npx wrangler login` 浏览器授权）：
+
+```bash
+DSH_CATALOG_ORIGIN=https://dsh-ccswitch-importer-catalog.pages.dev \
+  bash scripts/deploy-catalog.sh
+```
+
+脚本会生成目录文件并写入 `_headers` / `_redirects`，把 `/v1/plugins` 重写到 `v1/plugins.json`（保证 JSON Content-Type）。也可以手动放入生成文件并添加以下文件：
 
 ```text
 # _redirects
