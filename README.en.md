@@ -60,6 +60,8 @@ This plugin ships a standard catalog source for DSH Community Market as describe
 - `test/catalog.test.mjs` — validates the output against the official schemas and asserts metadata consistency;
 - [docs/catalog.md](./docs/catalog.md) — deployment options, Content-Type requirements, and source registration.
 
+The repository is also tagged with the GitHub topic `dsh-plugin`, so it is automatically indexed by the [dshfind](https://dshfind.com) catalog source.
+
 Build and deploy:
 
 ```bash

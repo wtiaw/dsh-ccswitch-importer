@@ -60,6 +60,8 @@ dsh plugin --profile desktop add ./dsh-ccswitch-importer
 - `test/catalog.test.mjs` —— 用官方 Schema 校验生成结果并断言元数据一致；
 - [docs/catalog.md](./docs/catalog.md) —— 部署方式、Content-Type 要求与来源登记说明。
 
+同时，本插件仓库已添加 GitHub topic `dsh-plugin`，会被 [dshfind](https://dshfind.com) 目录来源按 topic 自动收录。
+
 生成与部署：
 
 ```bash

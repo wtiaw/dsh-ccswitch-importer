@@ -91,6 +91,14 @@ Market 的 **可安装** 列表要求条目同时满足：
 
 因此若要让本插件进入 **可安装** 视图，需要先把 `dsh-ccswitch-importer` 发布到 npm registry（当前未发布）。仅用于 **发现** 视图时，`repository` 身份已足够。
 
+## dshfind 收录
+
+[dshfind](https://dshfind.com) 是另一个合作目录来源，它通过 GitHub topic [`dsh-plugin`](https://github.com/topics/dsh-plugin) 自动聚合插件，并按约每日同步（02:17 UTC 或维护者手动触发 `gh workflow run sync-plugins.yml`）。
+
+`wtiaw/dsh-ccswitch-importer` 已添加 topics：`dsh-plugin`、`cc-switch`、`codex`、`import`、`reasoning`、`settings`。`dsh-plugin` 用于被 dshfind 收录；其余 topic 会成为插件标签（生态标记类不会被采用）。新增标签后，出现在 dshfind 的 DSH Market 来源中需等下一次数据刷新。
+
+注意：Market 的 dshfind adapter 目前不提供精确稳定的 npm 版本，因此 dshfind 条目**仅出现在「发现」视图**，不会进入「可安装」列表。
+
 ## 校验与测试
 
 - `npm test` 会运行 `test/catalog.test.mjs`：用官方 Schema 校验生成的 manifest 与 page，并断言条目与 `package.json` 元数据一致。
