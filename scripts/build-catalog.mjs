@@ -88,6 +88,7 @@ function writeCatalog() {
   console.log(`wrote ${join(OUT_DIR, "v1", "plugins.json")}`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const isCli = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isCli) {
   writeCatalog();
 }
