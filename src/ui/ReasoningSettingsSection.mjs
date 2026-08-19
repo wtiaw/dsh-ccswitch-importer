@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { LEVELS } from "../domain/validation.mjs";
 import { draftForModel, draftSignature, reconcileDraft, rebaseDraft, reloadDraft } from "./reasoning-editor-state.mjs";
+import { loadCollapse, saveCollapse, withModelToggled, isModelCollapsed } from "./collapse-state.mjs";
 
 const h = React.createElement;
 
@@ -10,7 +11,7 @@ function displayStatus(status) {
   return status;
 }
 
-function ModelEditor({ route, model, controller, writable, revision }) {
+function ModelEditor({ route, model, controller, writable, revision, collapsed = false, onToggleCollapsed }) {
   const initial = draftForModel(model);
   const [draft, setDraft] = useState(initial);
   const [baseline, setBaseline] = useState(initial);
@@ -111,7 +112,7 @@ function ModelEditor({ route, model, controller, writable, revision }) {
       : status
         ? "dsh-reasoning-status dsh-reasoning-status--error"
         : "dsh-reasoning-status";
-  return h("article", { className: "dsh-reasoning-model" },
+  return h("article", { className: "dsh-reasoning-model" + (collapsed ? " dsh-reasoning-model--collapsed" : "") },
     h("header", { className: "dsh-reasoning-model__header" },
       h("div", { className: "dsh-reasoning-model__identity" },
         h("strong", null, modelName),
@@ -136,8 +137,16 @@ function ModelEditor({ route, model, controller, writable, revision }) {
           }, "启用"),
         ),
       ),
+      h("button", {
+        type: "button",
+        className: "dsh-reasoning-collapse",
+        "aria-expanded": !collapsed,
+        "aria-controls": "dsh-reasoning-model-body-" + customBodyId,
+        "aria-label": (collapsed ? "展开" : "收起") + " " + modelName + " 推理设置",
+        onClick: () => onToggleCollapsed?.(route, model.id, !collapsed),
+      }, h("span", { "aria-hidden": "true" }, collapsed ? "⌄" : "⌃")),
     ),
-    draft.mode === "enabled" && h("div", { className: "dsh-reasoning-model__body" },
+    h("div", { id: "dsh-reasoning-model-body-" + customBodyId, className: "dsh-reasoning-model__body", hidden: collapsed || draft.mode !== "enabled" },
       h("div", { className: "dsh-reasoning-levels", "aria-label": model.id + " 可用推理等级" },
         h("div", { className: "dsh-reasoning-levels__heading" },
           h("span", { className: "dsh-reasoning-levels__label" }, "可用等级"),
@@ -182,7 +191,7 @@ function ModelEditor({ route, model, controller, writable, revision }) {
         ),
       ),
     ),
-    h("footer", { className: "dsh-reasoning-model__footer" },
+    !collapsed && h("footer", { className: "dsh-reasoning-model__footer" },
       h("span", { className: "dsh-reasoning-remote-status", role: "status", "aria-live": "polite" }, remoteChanged ? "远端已更新" : ""),
       remoteChanged && h("button", { className: "dsh-reasoning-reload", type: "button", onClick: reload }, "重新载入"),
       h("span", { role: "status", "aria-live": "polite", className: statusClass }, displayStatus(status)),
@@ -191,7 +200,7 @@ function ModelEditor({ route, model, controller, writable, revision }) {
   );
 }
 
-function renderProvider([route, provider], controller, writable, revision) {
+function renderProvider([route, provider], controller, writable, revision, collapse, onToggleCollapsed) {
   return h(
     "section",
     { key: route, className: "dsh-reasoning-provider" },
@@ -207,14 +216,26 @@ function renderProvider([route, provider], controller, writable, revision) {
         controller,
         writable,
         revision,
+        collapsed: isModelCollapsed(collapse, route, model.id),
+        onToggleCollapsed,
       })),
     ),
   );
 }
 
-export function ReasoningSettingsSection({ controller, embedded = false }) {
+export function ReasoningSettingsSection({ controller, embedded = false, collapse: collapseProp, setCollapse: setCollapseProp }) {
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const providers = Object.entries(snapshot.providers).filter(([, provider]) => Array.isArray(provider?.models));
+  const [localCollapse, setLocalCollapse] = useState(() => loadCollapse());
+  const collapse = collapseProp ?? localCollapse;
+  const updateCollapse = setCollapseProp ?? setLocalCollapse;
+  const toggleModelCollapsed = (route, modelId, collapsed) => {
+    updateCollapse((current) => {
+      const next = withModelToggled(current, route, modelId, collapsed);
+      saveCollapse(next);
+      return next;
+    });
+  };
   useEffect(() => {
     if (snapshot.status === "idle") void controller.refresh();
   }, [controller, snapshot.status]);
@@ -229,6 +250,6 @@ export function ReasoningSettingsSection({ controller, embedded = false }) {
     ),
     providers.length === 0
       ? h("p", null, "暂无自定义 provider 模型。")
-      : providers.map((entry) => renderProvider(entry, controller, snapshot.writable, snapshot.revision)),
+      : providers.map((entry) => renderProvider(entry, controller, snapshot.writable, snapshot.revision, collapse, toggleModelCollapsed)),
   );
 }

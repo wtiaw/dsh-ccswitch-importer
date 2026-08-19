@@ -361,6 +361,81 @@ window.__ModuleLoader__.load({
 		  return { draft: next, baseline: next, baselineRevision: remoteRevision, remoteChanged: false };
 		}
 
+		// src/ui/collapse-state.mjs
+		var COLLAPSE_KEY = "dsh-ccswitch-importer:collapse:v1";
+		var EMPTY = Object.freeze({
+		  reasoningPanel: false,
+		  importPanel: false,
+		  models: /* @__PURE__ */ Object.create(null)
+		});
+		function isRecord(value) {
+		  return value !== null && typeof value === "object" && !Array.isArray(value);
+		}
+		function normalizeCollapse(input) {
+		  const out = {
+		    reasoningPanel: false,
+		    importPanel: false,
+		    models: /* @__PURE__ */ Object.create(null)
+		  };
+		  if (!isRecord(input)) return out;
+		  out.reasoningPanel = input.reasoningPanel === true;
+		  out.importPanel = input.importPanel === true;
+		  if (isRecord(input.models)) {
+		    for (const route of Object.keys(input.models)) {
+		      const byModel = input.models[route];
+		      if (!isRecord(byModel)) continue;
+		      const normalized = /* @__PURE__ */ Object.create(null);
+		      for (const modelId of Object.keys(byModel)) {
+		        if (byModel[modelId] === true) normalized[modelId] = true;
+		      }
+		      out.models[route] = normalized;
+		    }
+		  }
+		  return out;
+		}
+		function loadCollapse(storage = defaultStorage()) {
+		  if (!storage) return EMPTY;
+		  try {
+		    const raw = storage.getItem(COLLAPSE_KEY);
+		    if (raw == null) return EMPTY;
+		    return normalizeCollapse(JSON.parse(raw));
+		  } catch {
+		    return EMPTY;
+		  }
+		}
+		function saveCollapse(state, storage = defaultStorage()) {
+		  if (!storage) return false;
+		  try {
+		    storage.setItem(COLLAPSE_KEY, JSON.stringify(normalizeCollapse(state)));
+		    return true;
+		  } catch {
+		    return false;
+		  }
+		}
+		function withPanelToggled(state, panel) {
+		  if (panel !== "reasoningPanel" && panel !== "importPanel") return state;
+		  return { ...state, [panel]: state?.[panel] !== true };
+		}
+		function withModelToggled(state, route, modelId, collapsed) {
+		  const models = { ...state.models ?? {} };
+		  const byRoute = { ...models[route] ?? {} };
+		  if (collapsed) byRoute[modelId] = true;
+		  else delete byRoute[modelId];
+		  if (Object.keys(byRoute).length === 0) delete models[route];
+		  else models[route] = byRoute;
+		  return { ...state, models };
+		}
+		function isModelCollapsed(state, route, modelId) {
+		  return state?.models?.[route]?.[modelId] === true;
+		}
+		function defaultStorage() {
+		  try {
+		    return typeof localStorage === "undefined" ? null : localStorage;
+		  } catch {
+		    return null;
+		  }
+		}
+
 		// src/ui/ReasoningSettingsSection.mjs
 		var h = import_react.default.createElement;
 		function displayStatus(status) {
@@ -368,7 +443,7 @@ window.__ModuleLoader__.load({
 		  if (status === "saved") return "\u5DF2\u4FDD\u5B58";
 		  return status;
 		}
-		function ModelEditor({ route, model, controller, writable, revision }) {
+		function ModelEditor({ route, model, controller, writable, revision, collapsed = false, onToggleCollapsed }) {
 		  const initial = draftForModel(model);
 		  const [draft, setDraft] = (0, import_react.useState)(initial);
 		  const [baseline, setBaseline] = (0, import_react.useState)(initial);
@@ -459,7 +534,7 @@ window.__ModuleLoader__.load({
 		  const statusClass = status === "saving" ? "dsh-reasoning-status dsh-reasoning-status--saving" : status === "saved" ? "dsh-reasoning-status dsh-reasoning-status--success" : status ? "dsh-reasoning-status dsh-reasoning-status--error" : "dsh-reasoning-status";
 		  return h(
 		    "article",
-		    { className: "dsh-reasoning-model" },
+		    { className: "dsh-reasoning-model" + (collapsed ? " dsh-reasoning-model--collapsed" : "") },
 		    h(
 		      "header",
 		      { className: "dsh-reasoning-model__header" },
@@ -491,11 +566,19 @@ window.__ModuleLoader__.load({
 		            onClick: () => setMode("enabled")
 		          }, "\u542F\u7528")
 		        )
-		      )
+		      ),
+		      h("button", {
+		        type: "button",
+		        className: "dsh-reasoning-collapse",
+		        "aria-expanded": !collapsed,
+		        "aria-controls": "dsh-reasoning-model-body-" + customBodyId,
+		        "aria-label": (collapsed ? "\u5C55\u5F00" : "\u6536\u8D77") + " " + modelName + " \u63A8\u7406\u8BBE\u7F6E",
+		        onClick: () => onToggleCollapsed?.(route, model.id, !collapsed)
+		      }, h("span", { "aria-hidden": "true" }, collapsed ? "\u2304" : "\u2303"))
 		    ),
-		    draft.mode === "enabled" && h(
+		    h(
 		      "div",
-		      { className: "dsh-reasoning-model__body" },
+		      { id: "dsh-reasoning-model-body-" + customBodyId, className: "dsh-reasoning-model__body", hidden: collapsed || draft.mode !== "enabled" },
 		      h(
 		        "div",
 		        { className: "dsh-reasoning-levels", "aria-label": model.id + " \u53EF\u7528\u63A8\u7406\u7B49\u7EA7" },
@@ -558,7 +641,7 @@ window.__ModuleLoader__.load({
 		        )
 		      )
 		    ),
-		    h(
+		    !collapsed && h(
 		      "footer",
 		      { className: "dsh-reasoning-model__footer" },
 		      h("span", { className: "dsh-reasoning-remote-status", role: "status", "aria-live": "polite" }, remoteChanged ? "\u8FDC\u7AEF\u5DF2\u66F4\u65B0" : ""),
@@ -568,7 +651,7 @@ window.__ModuleLoader__.load({
 		    )
 		  );
 		}
-		function renderProvider([route, provider], controller, writable, revision) {
+		function renderProvider([route, provider], controller, writable, revision, collapse, onToggleCollapsed) {
 		  return h(
 		    "section",
 		    { key: route, className: "dsh-reasoning-provider" },
@@ -587,14 +670,26 @@ window.__ModuleLoader__.load({
 		        model,
 		        controller,
 		        writable,
-		        revision
+		        revision,
+		        collapsed: isModelCollapsed(collapse, route, model.id),
+		        onToggleCollapsed
 		      }))
 		    )
 		  );
 		}
-		function ReasoningSettingsSection({ controller, embedded = false }) {
+		function ReasoningSettingsSection({ controller, embedded = false, collapse: collapseProp, setCollapse: setCollapseProp }) {
 		  const snapshot = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 		  const providers = Object.entries(snapshot.providers).filter(([, provider]) => Array.isArray(provider?.models));
+		  const [localCollapse, setLocalCollapse] = (0, import_react.useState)(() => loadCollapse());
+		  const collapse = collapseProp ?? localCollapse;
+		  const updateCollapse = setCollapseProp ?? setLocalCollapse;
+		  const toggleModelCollapsed = (route, modelId, collapsed) => {
+		    updateCollapse((current) => {
+		      const next = withModelToggled(current, route, modelId, collapsed);
+		      saveCollapse(next);
+		      return next;
+		    });
+		  };
 		  (0, import_react.useEffect)(() => {
 		    if (snapshot.status === "idle") void controller.refresh();
 		  }, [controller, snapshot.status]);
@@ -609,7 +704,7 @@ window.__ModuleLoader__.load({
 		      h("h2", null, "\u6A21\u578B\u63A8\u7406"),
 		      h("p", null, "\u4E3A\u81EA\u5B9A\u4E49 provider \u7684\u6BCF\u4E2A\u6A21\u578B\u8BBE\u7F6E\u63A8\u7406\u7B49\u7EA7\u3002")
 		    ),
-		    providers.length === 0 ? h("p", null, "\u6682\u65E0\u81EA\u5B9A\u4E49 provider \u6A21\u578B\u3002") : providers.map((entry) => renderProvider(entry, controller, snapshot.writable, snapshot.revision))
+		    providers.length === 0 ? h("p", null, "\u6682\u65E0\u81EA\u5B9A\u4E49 provider \u6A21\u578B\u3002") : providers.map((entry) => renderProvider(entry, controller, snapshot.writable, snapshot.revision, collapse, toggleModelCollapsed))
 		  );
 		}
 
@@ -630,7 +725,7 @@ window.__ModuleLoader__.load({
 		  const safe = status === "new" || status === "update" || status === "unchanged" || status === "blocked" ? status : "unchanged";
 		  return `dsh-ccswitch-import__badge dsh-ccswitch-import__badge--${safe}`;
 		}
-		function CCSwitchImportSection({ controller }) {
+		function CCSwitchImportSection({ controller, collapse, setCollapse }) {
 		  if (!controller) return null;
 		  const snapshot = (0, import_react2.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 		  (0, import_react2.useEffect)(() => {
@@ -640,9 +735,18 @@ window.__ModuleLoader__.load({
 		  const busy = snapshot.phase === "loading" || snapshot.phase === "importing";
 		  const selected = new Set(snapshot.selectedIds);
 		  const profiles = Array.isArray(snapshot.profiles) ? snapshot.profiles : [];
+		  const collapsed = collapse?.importPanel === true;
+		  const toggleCollapsed = () => {
+		    if (typeof setCollapse !== "function") return;
+		    setCollapse((current) => {
+		      const next = withPanelToggled(current, "importPanel");
+		      saveCollapse(next);
+		      return next;
+		    });
+		  };
 		  return h2(
 		    "section",
-		    { className: "dsh-ccswitch-import", "aria-labelledby": "dsh-ccswitch-import-title" },
+		    { className: "dsh-ccswitch-import" + (collapsed ? " dsh-ccswitch-import--collapsed" : ""), "aria-labelledby": "dsh-ccswitch-import-title" },
 		    h2(
 		      "div",
 		      { className: "dsh-ccswitch-import__header" },
@@ -650,68 +754,83 @@ window.__ModuleLoader__.load({
 		        "div",
 		        null,
 		        h2("h2", { id: "dsh-ccswitch-import-title", className: "dsh-ccswitch-import__title" }, "CCSwitch \u5BFC\u5165"),
-		        h2("p", { className: "dsh-ccswitch-import__hint" }, "\u4ECE\u672C\u673A CCSwitch \u8BFB\u53D6 provider \u914D\u7F6E\u3002")
+		        h2("p", { className: "dsh-ccswitch-import__hint" }, collapsed ? "\u70B9\u51FB\u5C55\u5F00 CCSwitch \u5BFC\u5165\u8BBE\u7F6E" : "\u4ECE\u672C\u673A CCSwitch \u8BFB\u53D6 provider \u914D\u7F6E\u3002")
 		      ),
 		      h2(
 		        "div",
-		        { className: "dsh-ccswitch-import__actions" },
-		        h2("button", { className: "dsh-ccswitch-import__secondary", type: "button", disabled: busy, onClick: () => {
-		          void controller.scan().catch(() => {
-		          });
-		        } }, busy ? "\u5904\u7406\u4E2D..." : "\u626B\u63CF"),
-		        h2("button", { className: "dsh-ccswitch-import__primary", type: "button", disabled: busy || selected.size === 0, onClick: () => {
-		          void controller.importSelected().catch(() => {
-		          });
-		        } }, "\u5BFC\u5165\u9009\u4E2D")
+		        { className: "dsh-ccswitch-import__header-actions" },
+		        h2("button", {
+		          type: "button",
+		          className: "dsh-ccswitch-collapse",
+		          "aria-expanded": !collapsed,
+		          "aria-controls": "dsh-ccswitch-import-body",
+		          onClick: toggleCollapsed
+		        }, h2("span", { "aria-hidden": "true" }, collapsed ? "\u2304" : "\u2303")),
+		        !collapsed && h2(
+		          "div",
+		          { className: "dsh-ccswitch-import__actions" },
+		          h2("button", { className: "dsh-ccswitch-import__secondary", type: "button", disabled: busy, onClick: () => {
+		            void controller.scan().catch(() => {
+		            });
+		          } }, busy ? "\u5904\u7406\u4E2D..." : "\u626B\u63CF"),
+		          h2("button", { className: "dsh-ccswitch-import__primary", type: "button", disabled: busy || selected.size === 0, onClick: () => {
+		            void controller.importSelected().catch(() => {
+		            });
+		          } }, "\u5BFC\u5165\u9009\u4E2D")
+		        )
 		      )
 		    ),
-		    snapshot.error && h2("p", { role: "alert", className: "dsh-ccswitch-import__error" }, snapshot.error),
-		    profiles.length === 0 && snapshot.phase !== "loading" ? h2("p", { className: "dsh-ccswitch-import__empty" }, "\u6CA1\u6709\u53EF\u8BFB\u53D6\u7684 CCSwitch provider\u3002") : h2(
+		    h2(
 		      "div",
-		      { className: "dsh-ccswitch-import__list" },
-		      ...profiles.map((profile) => {
-		        const selectable = isSelectable(profile);
-		        return h2(
-		          "label",
-		          {
-		            key: profile.profileId,
-		            className: "dsh-ccswitch-import__row" + (selectable ? "" : " dsh-ccswitch-import__row--blocked")
-		          },
-		          h2("input", {
-		            type: "checkbox",
-		            checked: selected.has(profile.profileId),
-		            disabled: !selectable || busy,
-		            onChange: () => controller.toggleSelected(profile.profileId)
-		          }),
-		          h2(
-		            "span",
-		            { className: "dsh-ccswitch-import__content" },
+		      { id: "dsh-ccswitch-import-body", className: "dsh-ccswitch-import__body", hidden: collapsed },
+		      snapshot.error && h2("p", { role: "alert", className: "dsh-ccswitch-import__error" }, snapshot.error),
+		      profiles.length === 0 && snapshot.phase !== "loading" ? h2("p", { className: "dsh-ccswitch-import__empty" }, "\u6CA1\u6709\u53EF\u8BFB\u53D6\u7684 CCSwitch provider\u3002") : h2(
+		        "div",
+		        { className: "dsh-ccswitch-import__list" },
+		        ...profiles.map((profile) => {
+		          const selectable = isSelectable(profile);
+		          return h2(
+		            "label",
+		            {
+		              key: profile.profileId,
+		              className: "dsh-ccswitch-import__row" + (selectable ? "" : " dsh-ccswitch-import__row--blocked")
+		            },
+		            h2("input", {
+		              type: "checkbox",
+		              checked: selected.has(profile.profileId),
+		              disabled: !selectable || busy,
+		              onChange: () => controller.toggleSelected(profile.profileId)
+		            }),
 		            h2(
 		              "span",
-		              { className: "dsh-ccswitch-import__primary-line" },
-		              h2("strong", null, profile.profileName || profile.profileId),
-		              profile.baseURL ? h2("code", null, profile.baseURL) : null
+		              { className: "dsh-ccswitch-import__content" },
+		              h2(
+		                "span",
+		                { className: "dsh-ccswitch-import__primary-line" },
+		                h2("strong", null, profile.profileName || profile.profileId),
+		                profile.baseURL ? h2("code", null, profile.baseURL) : null
+		              ),
+		              h2(
+		                "span",
+		                { className: "dsh-ccswitch-import__meta-line" },
+		                h2("code", { className: "dsh-ccswitch-import__provider-key" }, profile.providerKey || "\u5F85\u751F\u6210 provider key"),
+		                h2("span", null, `${profile.credential === "found" ? "\u51ED\u636E\u5DF2\u627E\u5230" : "\u7F3A\u5C11\u51ED\u636E"} \xB7 ${(profile.modelIds ?? []).join(", ") || "\u65E0\u6A21\u578B"}`),
+		                Array.isArray(profile.warnings) && profile.warnings.length > 0 ? h2("span", { className: "dsh-ccswitch-import__warnings" }, profile.warnings.join("\uFF1B")) : null
+		              )
 		            ),
-		            h2(
-		              "span",
-		              { className: "dsh-ccswitch-import__meta-line" },
-		              h2("code", { className: "dsh-ccswitch-import__provider-key" }, profile.providerKey || "\u5F85\u751F\u6210 provider key"),
-		              h2("span", null, `${profile.credential === "found" ? "\u51ED\u636E\u5DF2\u627E\u5230" : "\u7F3A\u5C11\u51ED\u636E"} \xB7 ${(profile.modelIds ?? []).join(", ") || "\u65E0\u6A21\u578B"}`),
-		              Array.isArray(profile.warnings) && profile.warnings.length > 0 ? h2("span", { className: "dsh-ccswitch-import__warnings" }, profile.warnings.join("\uFF1B")) : null
-		            )
-		          ),
-		          h2("span", { className: badgeClass(profile.status) }, statusLabel(profile.status))
-		        );
-		      })
-		    ),
-		    snapshot.results.length > 0 && h2(
-		      "ul",
-		      { className: "dsh-ccswitch-import__results" },
-		      ...snapshot.results.map((result) => h2(
-		        "li",
-		        { key: `${result.profileId}-${result.status}` },
-		        `${result.profileId}: ${result.status === "failed" ? result.error : statusLabel(result.status)}`
-		      ))
+		            h2("span", { className: badgeClass(profile.status) }, statusLabel(profile.status))
+		          );
+		        })
+		      ),
+		      snapshot.results.length > 0 && h2(
+		        "ul",
+		        { className: "dsh-ccswitch-import__results" },
+		        ...snapshot.results.map((result) => h2(
+		          "li",
+		          { key: `${result.profileId}-${result.status}` },
+		          `${result.profileId}: ${result.status === "failed" ? result.error : statusLabel(result.status)}`
+		        ))
+		      )
 		    )
 		  );
 		}
@@ -725,21 +844,45 @@ window.__ModuleLoader__.load({
 		    const injected = typeof builtIn.inject === "function" ? builtIn.inject() : {};
 		    modelsPage = h3(builtIn.component, { ...injected, close });
 		  }
+		  const [collapse, setCollapse] = (0, import_react3.useState)(() => loadCollapse());
+		  const reasoningCollapsed = collapse.reasoningPanel === true;
+		  const toggleReasoning = () => {
+		    setCollapse((current) => {
+		      const next = withPanelToggled(current, "reasoningPanel");
+		      saveCollapse(next);
+		      return next;
+		    });
+		  };
 		  return h3(
 		    "div",
 		    { className: "dsh-reasoning-composite" },
 		    modelsPage,
-		    h3(CCSwitchImportSection, { controller: importer }),
+		    h3(CCSwitchImportSection, { controller: importer, collapse, setCollapse }),
 		    h3(
 		      "section",
-		      { className: "dsh-reasoning-embed", "aria-label": t?.("nav") ?? "Model reasoning" },
-		      h3("h2", { className: "dsh-reasoning-embed__title" }, t?.("nav") ?? "\u6A21\u578B\u63A8\u7406"),
+		      { className: "dsh-reasoning-embed" + (reasoningCollapsed ? " dsh-reasoning-embed--collapsed" : ""), "aria-label": t?.("nav") ?? "Model reasoning" },
 		      h3(
-		        "p",
-		        { className: "dsh-reasoning-embed__hint" },
-		        "\u4E3A\u81EA\u5B9A\u4E49 provider \u7684\u6BCF\u4E2A\u6A21\u578B\u8BBE\u7F6E\u63A8\u7406\u7B49\u7EA7\uFF1B\u4FDD\u5B58\u540E\u5373\u53EF\u5728\u6A21\u578B\u9009\u62E9\u5668\u4E2D\u5207\u6362\u3002"
+		        "button",
+		        {
+		          type: "button",
+		          className: "dsh-reasoning-embed__toggle",
+		          "aria-expanded": !reasoningCollapsed,
+		          "aria-controls": "dsh-reasoning-embed-body",
+		          onClick: toggleReasoning
+		        },
+		        h3("span", { className: "dsh-reasoning-embed__title" }, t?.("nav") ?? "\u6A21\u578B\u63A8\u7406"),
+		        h3(
+		          "span",
+		          { className: "dsh-reasoning-embed__hint" },
+		          reasoningCollapsed ? "\u70B9\u51FB\u5C55\u5F00\u6A21\u578B\u63A8\u7406\u8BBE\u7F6E" : "\u4E3A\u81EA\u5B9A\u4E49 provider \u7684\u6BCF\u4E2A\u6A21\u578B\u8BBE\u7F6E\u63A8\u7406\u7B49\u7EA7\uFF1B\u4FDD\u5B58\u540E\u5373\u53EF\u5728\u6A21\u578B\u9009\u62E9\u5668\u4E2D\u5207\u6362\u3002"
+		        ),
+		        h3("span", { className: "dsh-reasoning-embed__toggle-chevron", "aria-hidden": "true" }, reasoningCollapsed ? "\u2304" : "\u2303")
 		      ),
-		      h3(ReasoningSettingsSection, { controller, embedded: true })
+		      h3(
+		        "div",
+		        { id: "dsh-reasoning-embed-body", hidden: reasoningCollapsed },
+		        h3(ReasoningSettingsSection, { controller, embedded: true, collapse, setCollapse })
+		      )
 		    )
 		  );
 		}
@@ -750,7 +893,7 @@ window.__ModuleLoader__.load({
 		.dsh-reasoning-composite{display:flex;flex-direction:column;gap:20px;}
 		.dsh-reasoning-embed{border-top:1px solid var(--dsw-alias-border-l2);padding-top:16px;}
 		.dsh-reasoning-embed__title{margin:0 0 4px;color:var(--dsw-alias-label-primary);font-size:16px;font-weight:500;line-height:24px;}
-		.dsh-reasoning-embed__hint{margin:0 0 14px;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;}
+		.dsh-reasoning-embed__hint{margin:0 0 14px;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;}.dsh-reasoning-embed__toggle{display:flex;align-items:center;gap:12px;width:100%;min-width:0;padding:0;border:0;background:transparent;color:var(--dsw-alias-label-primary);font-family:inherit;text-align:left;cursor:pointer;}.dsh-reasoning-embed__toggle:hover .dsh-reasoning-embed__title{color:var(--dsw-alias-brand-primary);}.dsh-reasoning-embed__toggle:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}.dsh-reasoning-embed__toggle .dsh-reasoning-embed__title{flex:none;margin:0;}.dsh-reasoning-embed__toggle .dsh-reasoning-embed__hint{flex:1 1 auto;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.dsh-reasoning-embed__toggle-chevron{flex:none;color:var(--dsw-alias-label-tertiary);font-size:14px;line-height:18px;}.dsh-reasoning-collapse,.dsh-ccswitch-collapse{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;box-sizing:border-box;padding:0 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:14px;line-height:18px;cursor:pointer;}.dsh-reasoning-collapse:hover,.dsh-ccswitch-collapse:hover{border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}.dsh-reasoning-collapse:focus-visible,.dsh-ccswitch-collapse:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}.dsh-reasoning-model--collapsed .dsh-reasoning-model__header{padding-bottom:8px;}.dsh-ccswitch-import__header-actions{display:flex;align-items:center;gap:8px;flex:none;}.dsh-ccswitch-import__body{padding-top:12px;}
 		.dsh-reasoning-settings{display:flex;flex-direction:column;gap:16px;color:var(--dsw-alias-label-primary);}
 		.dsh-reasoning-provider{padding:0 0 4px;}
 		.dsh-reasoning-provider__header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 0 8px;border-bottom:1px solid var(--dsw-alias-border-l2);}
@@ -826,7 +969,7 @@ window.__ModuleLoader__.load({
 		.dsh-ccswitch-import__badge--blocked{color:var(--dsw-alias-label-dimmed);}
 		.dsh-ccswitch-import__error{margin:0 0 12px;color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px;}
 		.dsh-ccswitch-import__results{margin:12px 0 0;padding-left:20px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;}
-		@media (max-width:640px){[role='dialog']:has(.dsh-ccswitch-import)>nav{flex:0 0 56px;width:56px;min-width:56px;}[role='dialog']:has(.dsh-ccswitch-import)>nav button{width:40px;min-width:40px;padding:0;justify-content:center;}[role='dialog']:has(.dsh-ccswitch-import)>nav button>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}[role='dialog']:has(.dsh-ccswitch-import)>div{min-width:0;}.dsh-ccswitch-import__header{flex-direction:column;}.dsh-ccswitch-import__actions{width:100%;flex-direction:column;align-items:stretch;}.dsh-ccswitch-import__actions button{width:100%;}.dsh-ccswitch-import__row{grid-template-columns:auto minmax(0,1fr);min-width:0;}.dsh-ccswitch-import__content{min-width:0;}.dsh-ccswitch-import__badge{grid-column:2;justify-self:start;}.dsh-reasoning-model__header{align-items:stretch;flex-direction:column;gap:10px;padding:10px;}.dsh-reasoning-model__mode-area{width:100%;justify-content:space-between;}.dsh-reasoning-model__body{padding:10px;}.dsh-reasoning-model__footer{padding:9px 10px;}.dsh-reasoning-levels__heading{align-items:flex-start;}.dsh-reasoning-levels__options{gap:6px;}.dsh-reasoning-custom__body{grid-template-columns:minmax(0,1fr);}}`;
+		@media (max-width:640px){[role='dialog']:has(.dsh-ccswitch-import)>nav{flex:0 0 56px;width:56px;min-width:56px;}[role='dialog']:has(.dsh-ccswitch-import)>nav button{width:40px;min-width:40px;padding:0;justify-content:center;}[role='dialog']:has(.dsh-ccswitch-import)>nav button>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}[role='dialog']:has(.dsh-ccswitch-import)>div{min-width:0;}.dsh-ccswitch-import__header{flex-direction:column;}.dsh-ccswitch-import__header-actions{width:100%;justify-content:space-between;}.dsh-ccswitch-import__header-actions .dsh-ccswitch-import__actions{flex:1;}.dsh-ccswitch-import__actions{width:100%;flex-direction:column;align-items:stretch;}.dsh-ccswitch-import__actions button{width:100%;}.dsh-ccswitch-import__row{grid-template-columns:auto minmax(0,1fr);min-width:0;}.dsh-ccswitch-import__content{min-width:0;}.dsh-ccswitch-import__badge{grid-column:2;justify-self:start;}.dsh-reasoning-model__header{align-items:stretch;flex-direction:column;gap:10px;padding:10px;}.dsh-reasoning-model__mode-area{width:100%;justify-content:space-between;}.dsh-reasoning-model__body{padding:10px;}.dsh-reasoning-model__footer{padding:9px 10px;}.dsh-reasoning-levels__heading{align-items:flex-start;}.dsh-reasoning-levels__options{gap:6px;}.dsh-reasoning-custom__body{grid-template-columns:minmax(0,1fr);}}`;
 		function installEmbedStyles() {
 		  if (typeof document === "undefined") return () => {
 		  };

@@ -13,6 +13,7 @@
 - `none` 映射为关闭；已知模型使用保守目录；未知模型只生成导入值对应的单个等级；非法值安全关闭并给出警告。
 - 重新导入不会覆盖已有的推理等级、route 默认值、headers、容量字段或未出现在 CCSwitch 的额外模型。
 - 原生 Models 页面、CCSwitch 导入区和模型推理编辑器共存于同一个 Models 页面。
+- CCSwitch 导入区、模型推理面板和每个模型卡片都支持收纳折叠，折叠偏好会保存在当前浏览器。
 
 CCSwitch 是只读导入源。首次导入后，DSH 设置和 credentials 服务成为配置事实来源；不会写回 CCSwitch 数据库。
 
@@ -38,7 +39,8 @@ dsh plugin --profile desktop add ./dsh-ccswitch-importer
 2. 选择需要导入的 provider，点击「导入选中」。
 3. 检查导入结果和 provider 模型列表。
 4. 在同页的模型推理区域确认已预填的等级；第三方网关需要自定义 wire value 时直接编辑并保存。
-5. 在输入框模型选择器中使用保存后的推理等级。
+5. 使用各面板标题栏或模型卡片右侧的箭头收纳/展开内容；折叠偏好会自动记住。
+6. 在输入框模型选择器中使用保存后的推理等级。
 
 导入会在设置 revision 冲突时停止并恢复本次写入的 credential；已有 credential 会恢复原值。
 

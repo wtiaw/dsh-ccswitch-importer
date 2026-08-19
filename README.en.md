@@ -13,6 +13,7 @@ Import CCSwitch Codex provider configurations into DeepSeek Harness and manage p
 - Maps `none` to disabled reasoning; known models use a conservative catalog; unknown models receive only the imported level; invalid values disable reasoning with a warning.
 - Re-imports preserve existing reasoning levels, route defaults, headers, capacity fields, and models that are absent from CCSwitch.
 - Keeps the native Models page, CCSwitch import controls, and reasoning editor in one Models page.
+- The CCSwitch import section, reasoning panel, and each model card can be collapsed; collapse preferences persist in the current browser.
 
 CCSwitch is a read-only import source. After import, DSH settings and the credentials service are authoritative; the plugin never writes back to the CCSwitch database.
 
@@ -38,7 +39,8 @@ After installing or updating, reload DSH Web and open **Settings -> Models**.
 2. Select the providers to import and click **Import selected**.
 3. Review the import results and provider model list.
 4. Confirm the prefilled reasoning levels in the reasoning section; edit wire values for a gateway when needed, then save.
-5. Use the saved reasoning levels from the composer model picker.
+5. Use the arrows in section headers or model cards to collapse and expand content; the preference is remembered automatically.
+6. Use the saved reasoning levels from the composer model picker.
 
 If a settings revision conflict occurs, the import stops and restores the credential written by that attempt; an existing credential is restored to its prior value.
 
