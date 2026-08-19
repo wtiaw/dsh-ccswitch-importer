@@ -51,6 +51,20 @@ dsh plugin --profile desktop add ./dsh-ccswitch-importer
 
 目录只是默认值，保存后的 DSH 字段由用户控制。
 
+## DSH Community Market 目录
+
+本插件按 [目录适配器指南（路径 A：标准来源）](https://github.com/anywhere-labs/deepseek-harness-desktop/blob/master/dsh-community-market/docs/catalog-adapter-guide.zh.md) 提供可接入 DSH Community Market 的标准目录。仓库内包含：
+
+- `scripts/build-catalog.mjs` —— 从 `package.json` 元数据生成 `catalog-source` manifest 与 `/v1/plugins` 条目页；
+- `test/catalog.test.mjs` —— 用官方 Schema 校验生成结果并断言元数据一致；
+- [docs/catalog.md](./docs/catalog.md) —— 部署方式、Content-Type 要求与来源登记说明。
+
+生成与部署：
+
+```bash
+DSH_CATALOG_ORIGIN=https://catalog.example.com npm run build:catalog
+```
+
 ## 安全边界与限制
 
 - Host 路由只接受 loopback、same-origin 请求；API key 不进入浏览器、日志、摘要或错误文本。

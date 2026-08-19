@@ -51,6 +51,20 @@ The conservative defaults include:
 
 The catalog is only a default. Saved DSH fields remain user-controlled.
 
+## DSH Community Market Catalog
+
+This plugin ships a standard catalog source for DSH Community Market as described in the [catalog adapter guide (path A: standard source)](https://github.com/anywhere-labs/deepseek-harness-desktop/blob/master/dsh-community-market/docs/catalog-adapter-guide.md). The repo includes:
+
+- `scripts/build-catalog.mjs` — generates the `catalog-source` manifest and the `/v1/plugins` page from `package.json` metadata;
+- `test/catalog.test.mjs` — validates the output against the official schemas and asserts metadata consistency;
+- [docs/catalog.md](./docs/catalog.md) — deployment options, Content-Type requirements, and source registration.
+
+Build and deploy:
+
+```bash
+DSH_CATALOG_ORIGIN=https://catalog.example.com npm run build:catalog
+```
+
 ## Security and Limitations
 
 - Host routes accept only loopback, same-origin requests; API keys never enter the browser, logs, summaries, or error text.

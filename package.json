@@ -21,6 +21,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:catalog": "node scripts/build-catalog.mjs",
     "test": "npm run build && node --test",
     "pack:check": "npm run build && npm pack --dry-run",
     "prepack": "npm run build"
@@ -71,6 +72,8 @@
     "access": "public"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "esbuild": "^0.25.0",
     "react": "^18.3.1"
   }
