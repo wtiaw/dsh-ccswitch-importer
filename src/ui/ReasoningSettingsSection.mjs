@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { LEVELS, reasoningStateForModel } from "../domain/validation.mjs";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { LEVELS } from "../domain/validation.mjs";
+import { draftForModel, draftSignature, reconcileDraft, reloadDraft } from "./reasoning-editor-state.mjs";
 
 const h = React.createElement;
 
@@ -9,33 +10,84 @@ function displayStatus(status) {
   return status;
 }
 
-function ModelEditor({ route, model, controller, writable }) {
-  const initial = useMemo(() => {
-    if (model.reasoningEfforts === false) return { mode: "disabled", efforts: {} };
-    if (model.reasoningEfforts && typeof model.reasoningEfforts === "object") {
-      return { mode: "enabled", efforts: { ...model.reasoningEfforts } };
-    }
-    const inferred = reasoningStateForModel(model.id);
-    return { mode: inferred.mode, efforts: { ...(inferred.efforts ?? {}) } };
-  }, [model.id, model.reasoningEfforts]);
-  const [mode, setMode] = useState(initial.mode);
-  const [efforts, setEfforts] = useState(initial.efforts);
+function ModelEditor({ route, model, controller, writable, revision }) {
+  const initial = draftForModel(model);
+  const [draft, setDraft] = useState(initial);
+  const [baseline, setBaseline] = useState(initial);
+  const [baselineRevision, setBaselineRevision] = useState(revision);
+  const [remoteChanged, setRemoteChanged] = useState(false);
   const [status, setStatus] = useState("");
   const [customOpen, setCustomOpen] = useState(false);
+  const draftRef = useRef(draft);
+  const baselineRef = useRef(baseline);
+  const baselineRevisionRef = useRef(baselineRevision);
+  const remoteChangedRef = useRef(remoteChanged);
+  draftRef.current = draft;
+  baselineRef.current = baseline;
+  baselineRevisionRef.current = baselineRevision;
+  remoteChangedRef.current = remoteChanged;
 
+  const applyReconciledState = (next) => {
+    const currentDraft = draftRef.current;
+    const currentBaseline = baselineRef.current;
+    if (draftSignature(next.draft) !== draftSignature(currentDraft)) {
+      draftRef.current = next.draft;
+      setDraft(next.draft);
+    }
+    if (draftSignature(next.baseline) !== draftSignature(currentBaseline)) {
+      baselineRef.current = next.baseline;
+      setBaseline(next.baseline);
+    }
+    if (next.baselineRevision !== baselineRevisionRef.current) {
+      baselineRevisionRef.current = next.baselineRevision;
+      setBaselineRevision(next.baselineRevision);
+    }
+    if (next.remoteChanged !== remoteChangedRef.current) {
+      remoteChangedRef.current = next.remoteChanged;
+      setRemoteChanged(next.remoteChanged);
+    }
+  };
+
+  useEffect(() => {
+    const next = reconcileDraft({
+      draft: draftRef.current,
+      baseline: baselineRef.current,
+      baselineRevision: baselineRevisionRef.current,
+      remoteModel: model,
+      remoteRevision: revision,
+      remoteChanged: remoteChangedRef.current,
+    });
+    applyReconciledState(next);
+  }, [controller, model.id, model.reasoningEfforts, revision]);
+
+  const setMode = (mode) => setDraft((current) => ({ ...current, mode }));
   const toggleLevel = (level, checked) => {
-    setEfforts((current) => {
-      const next = { ...current };
-      if (!checked) delete next[level];
-      else next[level] = level === "off" ? null : level;
-      return next;
+    setDraft((current) => {
+      const efforts = { ...current.efforts };
+      if (!checked) delete efforts[level];
+      else efforts[level] = level === "off" ? null : level;
+      return { ...current, efforts };
     });
   };
 
+  const reload = () => {
+    const remoteSnapshot = controller.getSnapshot();
+    const remoteModel = remoteSnapshot.providers[route]?.models?.find((entry) => entry.id === model.id) ?? model;
+    applyReconciledState(reloadDraft({ remoteModel, remoteRevision: remoteSnapshot.revision }));
+    setStatus("");
+  };
+
   const save = async () => {
+    const draftToSave = draftRef.current;
+    const savingSignature = draftSignature(draftToSave);
+    const savingRevision = baselineRevisionRef.current;
     setStatus("saving");
     try {
-      await controller.save(route, model.id, mode, efforts);
+      const nextSnapshot = await controller.save(route, model.id, draftToSave.mode, draftToSave.efforts, savingRevision);
+      if (draftSignature(draftRef.current) === savingSignature) {
+        const savedModel = nextSnapshot.providers[route]?.models?.find((entry) => entry.id === model.id) ?? model;
+        applyReconciledState(reloadDraft({ remoteModel: savedModel, remoteRevision: nextSnapshot.revision }));
+      }
       setStatus("saved");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -43,8 +95,15 @@ function ModelEditor({ route, model, controller, writable }) {
   };
 
   const modelName = model.name || model.id;
-  const selectedCount = Object.keys(efforts).length;
-  const customBodyId = `dsh-reasoning-custom-${route}-${model.id}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const selectedCount = Object.keys(draft.efforts).length;
+  const customBodyId = ("dsh-reasoning-custom-" + route + "-" + model.id).replace(/[^a-zA-Z0-9_-]/g, "-");
+  const statusClass = status === "saving"
+    ? "dsh-reasoning-status dsh-reasoning-status--saving"
+    : status === "saved"
+      ? "dsh-reasoning-status dsh-reasoning-status--success"
+      : status
+        ? "dsh-reasoning-status dsh-reasoning-status--error"
+        : "dsh-reasoning-status";
   return h("article", { className: "dsh-reasoning-model" },
     h("header", { className: "dsh-reasoning-model__header" },
       h("div", { className: "dsh-reasoning-model__identity" },
@@ -53,33 +112,33 @@ function ModelEditor({ route, model, controller, writable }) {
       ),
       h("div", { className: "dsh-reasoning-model__mode-area" },
         h("span", { className: "dsh-reasoning-model__mode-label" }, "推理模式"),
-        h("div", { className: "dsh-reasoning-mode", role: "group", "aria-label": `${model.id} 推理模式` },
+        h("div", { className: "dsh-reasoning-mode", role: "group", "aria-label": model.id + " 推理模式" },
           h("button", {
             type: "button",
-            className: mode === "disabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
-            "aria-pressed": mode === "disabled",
+            className: draft.mode === "disabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
+            "aria-pressed": draft.mode === "disabled",
             disabled: !writable,
             onClick: () => setMode("disabled"),
           }, "关闭"),
           h("button", {
             type: "button",
-            className: mode === "enabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
-            "aria-pressed": mode === "enabled",
+            className: draft.mode === "enabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
+            "aria-pressed": draft.mode === "enabled",
             disabled: !writable,
             onClick: () => setMode("enabled"),
           }, "启用"),
         ),
       ),
     ),
-    mode === "enabled" && h("div", { className: "dsh-reasoning-model__body" },
-      h("div", { className: "dsh-reasoning-levels", "aria-label": `${model.id} 可用推理等级` },
+    draft.mode === "enabled" && h("div", { className: "dsh-reasoning-model__body" },
+      h("div", { className: "dsh-reasoning-levels", "aria-label": model.id + " 可用推理等级" },
         h("div", { className: "dsh-reasoning-levels__heading" },
           h("span", { className: "dsh-reasoning-levels__label" }, "可用等级"),
-          h("span", { className: "dsh-reasoning-levels__summary" }, `已选 ${selectedCount} 项`),
+          h("span", { className: "dsh-reasoning-levels__summary" }, "已选 " + selectedCount + " 项"),
         ),
         h("div", { className: "dsh-reasoning-levels__options" },
           ...LEVELS.map((level) => {
-            const checked = Object.hasOwn(efforts, level);
+            const checked = Object.hasOwn(draft.efforts, level);
             return h("label", { key: level, className: "dsh-reasoning-level" + (checked ? " dsh-reasoning-level--active" : "") },
               h("input", {
                 type: "checkbox",
@@ -102,34 +161,36 @@ function ModelEditor({ route, model, controller, writable }) {
         }, h("span", null, customOpen ? "收起自定义映射" : "自定义 wire 值"),
         h("span", { "aria-hidden": "true" }, customOpen ? "⌃" : "⌄")),
         customOpen && h("div", { id: customBodyId, className: "dsh-reasoning-custom__body" },
-          ...LEVELS.filter((level) => Object.hasOwn(efforts, level)).map((level) => h("label", { key: level, className: "dsh-reasoning-custom__field" },
+          ...LEVELS.filter((level) => Object.hasOwn(draft.efforts, level)).map((level) => h("label", { key: level, className: "dsh-reasoning-custom__field" },
             h("span", null, level === "off" ? "off" : level),
             h("input", {
               type: "text",
-              value: efforts[level] ?? "",
+              value: draft.efforts[level] ?? "",
               placeholder: level === "off" ? "留空表示 null" : level,
               disabled: !writable,
-              onChange: (event) => setEfforts((current) => ({ ...current, [level]: event.target.value })),
-              "aria-label": `${model.id} ${level} wire 值`,
+              onChange: (event) => setDraft((current) => ({ ...current, efforts: { ...current.efforts, [level]: event.target.value } })),
+              "aria-label": model.id + " " + level + " wire 值",
             }),
           )),
         ),
       ),
     ),
     h("footer", { className: "dsh-reasoning-model__footer" },
-      status && status !== "saving" && h("span", { role: "status", className: status === "saved" ? "dsh-reasoning-status dsh-reasoning-status--success" : "dsh-reasoning-status dsh-reasoning-status--error" }, displayStatus(status)),
+      h("span", { className: "dsh-reasoning-remote-status", hidden: !remoteChanged }, "远端已更新"),
+      remoteChanged && h("button", { className: "dsh-reasoning-reload", type: "button", onClick: reload }, "重新载入"),
+      h("span", { role: "status", "aria-live": "polite", className: statusClass }, displayStatus(status)),
       h("button", { className: "dsh-reasoning-save", type: "button", disabled: !writable || status === "saving", onClick: save }, status === "saving" ? "保存中…" : "保存"),
     ),
   );
 }
 
-function renderProvider([route, provider], controller, writable) {
+function renderProvider([route, provider], controller, writable, revision) {
   return h(
     "section",
     { key: route, className: "dsh-reasoning-provider" },
     h("div", { className: "dsh-reasoning-provider__header" },
       h("h3", null, route),
-      h("span", null, `${provider.models.length} 个模型`),
+      h("span", null, provider.models.length + " 个模型"),
     ),
     h("div", { className: "dsh-reasoning-provider__models" },
       ...provider.models.map((model) => h(ModelEditor, {
@@ -138,6 +199,7 @@ function renderProvider([route, provider], controller, writable) {
         model,
         controller,
         writable,
+        revision,
       })),
     ),
   );
@@ -160,6 +222,6 @@ export function ReasoningSettingsSection({ controller, embedded = false }) {
     ),
     providers.length === 0
       ? h("p", null, "暂无自定义 provider 模型。")
-      : providers.map((entry) => renderProvider(entry, controller, snapshot.writable)),
+      : providers.map((entry) => renderProvider(entry, controller, snapshot.writable, snapshot.revision)),
   );
 }
