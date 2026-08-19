@@ -151,40 +151,49 @@ window.__ModuleLoader__.load({
 		    snapshot = next;
 		    for (const listener of listeners) listener();
 		  };
+		  let operationQueue = Promise.resolve();
+		  const enqueue = (operation) => {
+		    const next = operationQueue.then(operation, operation);
+		    operationQueue = next.catch(() => {
+		    });
+		    return next;
+		  };
+		  const performRefresh = async () => {
+		    publish({ ...snapshot, status: "loading", error: null });
+		    try {
+		      const response = await api.settings.describe({});
+		      if (!response.result.ok) throw new Error(response.result.error.message);
+		      const namespace = response.result.value.namespaces.find((entry) => entry.ns === "llm-pi-ai");
+		      const providers = namespace?.value?.providers ?? {};
+		      publish({
+		        status: "ready",
+		        writable: response.result.value.writable === true,
+		        revision: namespace?.revision,
+		        providers,
+		        error: null
+		      });
+		    } catch (error) {
+		      publish({ ...snapshot, status: "error", error: error instanceof Error ? error.message : String(error) });
+		    }
+		    return snapshot;
+		  };
 		  const controller = {
 		    getSnapshot: () => snapshot,
 		    subscribe: (listener) => {
 		      listeners.add(listener);
 		      return () => listeners.delete(listener);
 		    },
-		    refresh: async () => {
-		      publish({ ...snapshot, status: "loading", error: null });
-		      try {
-		        const response = await api.settings.describe({});
-		        if (!response.result.ok) throw new Error(response.result.error.message);
-		        const namespace = response.result.value.namespaces.find((entry) => entry.ns === "llm-pi-ai");
-		        const providers = namespace?.value?.providers ?? {};
-		        publish({
-		          status: "ready",
-		          writable: response.result.value.writable === true,
-		          revision: namespace?.revision,
-		          providers,
-		          error: null
-		        });
-		      } catch (error) {
-		        publish({ ...snapshot, status: "error", error: error instanceof Error ? error.message : String(error) });
-		      }
-		      return snapshot;
-		    },
-		    save: async (route, modelId, mode, efforts, expectedRevision = snapshot.revision) => {
+		    refresh: () => enqueue(performRefresh),
+		    save: (route, modelId, mode, efforts, expectedRevision) => enqueue(async () => {
+		      const revisionAtExecution = expectedRevision ?? snapshot.revision;
 		      const before = snapshot.providers[route];
 		      const after = updateModelReasoning(before, modelId, mode, efforts);
 		      const mutation = settingsMutation(route, before, after);
-		      const response = await api.settings.mutate({ ...mutation, expectedRevision });
+		      const response = await api.settings.mutate({ ...mutation, expectedRevision: revisionAtExecution });
 		      if (!response.result.ok) throw new Error(response.result.error.message);
-		      await controller.refresh();
+		      await performRefresh();
 		      return controller.getSnapshot();
-		    }
+		    })
 		  };
 		  return controller;
 		}
@@ -343,6 +352,10 @@ window.__ModuleLoader__.load({
 		  }
 		  return { draft, baseline, baselineRevision, remoteChanged: true };
 		}
+		function rebaseDraft({ draft, savedModel, savedRevision }) {
+		  const baseline = draftForModel(savedModel);
+		  return { draft, baseline, baselineRevision: savedRevision, remoteChanged: false };
+		}
 		function reloadDraft({ remoteModel, remoteRevision }) {
 		  const next = draftForModel(remoteModel);
 		  return { draft: next, baseline: next, baselineRevision: remoteRevision, remoteChanged: false };
@@ -367,6 +380,7 @@ window.__ModuleLoader__.load({
 		  const baselineRef = (0, import_react.useRef)(baseline);
 		  const baselineRevisionRef = (0, import_react.useRef)(baselineRevision);
 		  const remoteChangedRef = (0, import_react.useRef)(remoteChanged);
+		  const saveInFlightRef = (0, import_react.useRef)(false);
 		  draftRef.current = draft;
 		  baselineRef.current = baseline;
 		  baselineRevisionRef.current = baselineRevision;
@@ -418,19 +432,25 @@ window.__ModuleLoader__.load({
 		    setStatus("");
 		  };
 		  const save = async () => {
+		    if (saveInFlightRef.current) return;
+		    saveInFlightRef.current = true;
 		    const draftToSave = draftRef.current;
 		    const savingSignature = draftSignature(draftToSave);
 		    const savingRevision = baselineRevisionRef.current;
 		    setStatus("saving");
 		    try {
 		      const nextSnapshot = await controller.save(route, model.id, draftToSave.mode, draftToSave.efforts, savingRevision);
+		      const savedModel = nextSnapshot.providers[route]?.models?.find((entry) => entry.id === model.id) ?? model;
 		      if (draftSignature(draftRef.current) === savingSignature) {
-		        const savedModel = nextSnapshot.providers[route]?.models?.find((entry) => entry.id === model.id) ?? model;
 		        applyReconciledState(reloadDraft({ remoteModel: savedModel, remoteRevision: nextSnapshot.revision }));
+		      } else {
+		        applyReconciledState(rebaseDraft({ draft: draftRef.current, savedModel, savedRevision: nextSnapshot.revision }));
 		      }
 		      setStatus("saved");
 		    } catch (error) {
 		      setStatus(error instanceof Error ? error.message : String(error));
+		    } finally {
+		      saveInFlightRef.current = false;
 		    }
 		  };
 		  const modelName = model.name || model.id;
@@ -541,7 +561,7 @@ window.__ModuleLoader__.load({
 		    h(
 		      "footer",
 		      { className: "dsh-reasoning-model__footer" },
-		      h("span", { className: "dsh-reasoning-remote-status", hidden: !remoteChanged }, "\u8FDC\u7AEF\u5DF2\u66F4\u65B0"),
+		      h("span", { className: "dsh-reasoning-remote-status", role: "status", "aria-live": "polite" }, remoteChanged ? "\u8FDC\u7AEF\u5DF2\u66F4\u65B0" : ""),
 		      remoteChanged && h("button", { className: "dsh-reasoning-reload", type: "button", onClick: reload }, "\u91CD\u65B0\u8F7D\u5165"),
 		      h("span", { role: "status", "aria-live": "polite", className: statusClass }, displayStatus(status)),
 		      h("button", { className: "dsh-reasoning-save", type: "button", disabled: !writable || status === "saving", onClick: save }, status === "saving" ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58")
@@ -754,7 +774,7 @@ window.__ModuleLoader__.load({
 		.dsh-reasoning-save:hover:not(:disabled),.dsh-ccswitch-import__primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);}
 		.dsh-reasoning-save:disabled,.dsh-ccswitch-import__primary:disabled,.dsh-ccswitch-import__secondary:disabled,.dsh-reasoning-mode__option:disabled{opacity:.4;cursor:default;}
 		.dsh-reasoning-save:focus-visible,.dsh-ccswitch-import__primary:focus-visible,.dsh-ccswitch-import__secondary:focus-visible,.dsh-reasoning-mode__option:focus-visible,.dsh-reasoning-custom__toggle:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
-		.dsh-reasoning-status{display:inline-flex;align-items:center;min-width:0;max-width:100%;min-height:20px;box-sizing:border-box;padding:1px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;font-size:11px;font-weight:500;line-height:18px;white-space:nowrap;}.dsh-reasoning-status:empty{display:none;}.dsh-reasoning-status--saving{color:var(--dsw-alias-label-secondary);border-color:var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);}.dsh-reasoning-reload{min-height:28px;padding:4px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}.dsh-reasoning-reload:hover{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-primary);}.dsh-reasoning-reload:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
+		.dsh-reasoning-status{display:inline-flex;align-items:center;min-width:0;max-width:100%;min-height:20px;box-sizing:border-box;padding:1px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;font-size:11px;font-weight:500;line-height:18px;white-space:nowrap;}.dsh-reasoning-status:empty,.dsh-reasoning-remote-status:empty{display:none;}.dsh-reasoning-status--saving{color:var(--dsw-alias-label-secondary);border-color:var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);}.dsh-reasoning-reload{min-height:28px;padding:4px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}.dsh-reasoning-reload:hover{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-primary);}.dsh-reasoning-reload:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
 		.dsh-reasoning-status--success{color:var(--dsw-alias-state-success-primary);}
 		.dsh-reasoning-status--error{max-width:240px;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;white-space:normal;}
 		.dsh-reasoning-model__body{min-width:0;padding:12px;border-top:1px solid var(--dsw-alias-border-l2);}
