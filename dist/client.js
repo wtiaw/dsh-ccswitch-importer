@@ -176,13 +176,14 @@ window.__ModuleLoader__.load({
 		      }
 		      return snapshot;
 		    },
-		    save: async (route, modelId, mode, efforts) => {
+		    save: async (route, modelId, mode, efforts, expectedRevision = snapshot.revision) => {
 		      const before = snapshot.providers[route];
 		      const after = updateModelReasoning(before, modelId, mode, efforts);
 		      const mutation = settingsMutation(route, before, after);
-		      const response = await api.settings.mutate({ ...mutation, expectedRevision: snapshot.revision });
+		      const response = await api.settings.mutate({ ...mutation, expectedRevision });
 		      if (!response.result.ok) throw new Error(response.result.error.message);
 		      await controller.refresh();
+		      return controller.getSnapshot();
 		    }
 		  };
 		  return controller;
@@ -315,45 +316,127 @@ window.__ModuleLoader__.load({
 
 		// src/ui/ReasoningSettingsSection.mjs
 		var import_react = __toESM(require("react"), 1);
+
+		// src/ui/reasoning-editor-state.mjs
+		function draftForModel(model) {
+		  if (model.reasoningEfforts === false) return { mode: "disabled", efforts: {} };
+		  if (model.reasoningEfforts && typeof model.reasoningEfforts === "object") {
+		    return { mode: "enabled", efforts: { ...model.reasoningEfforts } };
+		  }
+		  const inferred = reasoningStateForModel(model.id);
+		  return { mode: inferred.mode, efforts: { ...inferred.efforts ?? {} } };
+		}
+		function draftSignature(draft) {
+		  const efforts = Object.entries(draft.efforts ?? {}).sort(([left], [right]) => left.localeCompare(right));
+		  return JSON.stringify([draft.mode, efforts]);
+		}
+		function reconcileDraft({ draft, baseline, baselineRevision, remoteModel, remoteRevision, remoteChanged }) {
+		  const remoteDraft = draftForModel(remoteModel);
+		  const remoteSignature = draftSignature(remoteDraft);
+		  const baselineSignature = draftSignature(baseline);
+		  const draftIsClean = draftSignature(draft) === baselineSignature;
+		  if (remoteSignature === baselineSignature) {
+		    return { draft, baseline, baselineRevision: remoteRevision, remoteChanged };
+		  }
+		  if (draftIsClean) {
+		    return { draft: remoteDraft, baseline: remoteDraft, baselineRevision: remoteRevision, remoteChanged: false };
+		  }
+		  return { draft, baseline, baselineRevision, remoteChanged: true };
+		}
+		function reloadDraft({ remoteModel, remoteRevision }) {
+		  const next = draftForModel(remoteModel);
+		  return { draft: next, baseline: next, baselineRevision: remoteRevision, remoteChanged: false };
+		}
+
+		// src/ui/ReasoningSettingsSection.mjs
 		var h = import_react.default.createElement;
 		function displayStatus(status) {
 		  if (status === "saving") return "\u4FDD\u5B58\u4E2D\u2026";
 		  if (status === "saved") return "\u5DF2\u4FDD\u5B58";
 		  return status;
 		}
-		function ModelEditor({ route, model, controller, writable }) {
-		  const initial = (0, import_react.useMemo)(() => {
-		    if (model.reasoningEfforts === false) return { mode: "disabled", efforts: {} };
-		    if (model.reasoningEfforts && typeof model.reasoningEfforts === "object") {
-		      return { mode: "enabled", efforts: { ...model.reasoningEfforts } };
-		    }
-		    const inferred = reasoningStateForModel(model.id);
-		    return { mode: inferred.mode, efforts: { ...inferred.efforts ?? {} } };
-		  }, [model.id, model.reasoningEfforts]);
-		  const [mode, setMode] = (0, import_react.useState)(initial.mode);
-		  const [efforts, setEfforts] = (0, import_react.useState)(initial.efforts);
+		function ModelEditor({ route, model, controller, writable, revision }) {
+		  const initial = draftForModel(model);
+		  const [draft, setDraft] = (0, import_react.useState)(initial);
+		  const [baseline, setBaseline] = (0, import_react.useState)(initial);
+		  const [baselineRevision, setBaselineRevision] = (0, import_react.useState)(revision);
+		  const [remoteChanged, setRemoteChanged] = (0, import_react.useState)(false);
 		  const [status, setStatus] = (0, import_react.useState)("");
 		  const [customOpen, setCustomOpen] = (0, import_react.useState)(false);
+		  const draftRef = (0, import_react.useRef)(draft);
+		  const baselineRef = (0, import_react.useRef)(baseline);
+		  const baselineRevisionRef = (0, import_react.useRef)(baselineRevision);
+		  const remoteChangedRef = (0, import_react.useRef)(remoteChanged);
+		  draftRef.current = draft;
+		  baselineRef.current = baseline;
+		  baselineRevisionRef.current = baselineRevision;
+		  remoteChangedRef.current = remoteChanged;
+		  const applyReconciledState = (next) => {
+		    const currentDraft = draftRef.current;
+		    const currentBaseline = baselineRef.current;
+		    if (draftSignature(next.draft) !== draftSignature(currentDraft)) {
+		      draftRef.current = next.draft;
+		      setDraft(next.draft);
+		    }
+		    if (draftSignature(next.baseline) !== draftSignature(currentBaseline)) {
+		      baselineRef.current = next.baseline;
+		      setBaseline(next.baseline);
+		    }
+		    if (next.baselineRevision !== baselineRevisionRef.current) {
+		      baselineRevisionRef.current = next.baselineRevision;
+		      setBaselineRevision(next.baselineRevision);
+		    }
+		    if (next.remoteChanged !== remoteChangedRef.current) {
+		      remoteChangedRef.current = next.remoteChanged;
+		      setRemoteChanged(next.remoteChanged);
+		    }
+		  };
+		  (0, import_react.useEffect)(() => {
+		    const next = reconcileDraft({
+		      draft: draftRef.current,
+		      baseline: baselineRef.current,
+		      baselineRevision: baselineRevisionRef.current,
+		      remoteModel: model,
+		      remoteRevision: revision,
+		      remoteChanged: remoteChangedRef.current
+		    });
+		    applyReconciledState(next);
+		  }, [controller, model.id, model.reasoningEfforts, revision]);
+		  const setMode = (mode) => setDraft((current) => ({ ...current, mode }));
 		  const toggleLevel = (level, checked) => {
-		    setEfforts((current) => {
-		      const next = { ...current };
-		      if (!checked) delete next[level];
-		      else next[level] = level === "off" ? null : level;
-		      return next;
+		    setDraft((current) => {
+		      const efforts = { ...current.efforts };
+		      if (!checked) delete efforts[level];
+		      else efforts[level] = level === "off" ? null : level;
+		      return { ...current, efforts };
 		    });
 		  };
+		  const reload = () => {
+		    const remoteSnapshot = controller.getSnapshot();
+		    const remoteModel = remoteSnapshot.providers[route]?.models?.find((entry) => entry.id === model.id) ?? model;
+		    applyReconciledState(reloadDraft({ remoteModel, remoteRevision: remoteSnapshot.revision }));
+		    setStatus("");
+		  };
 		  const save = async () => {
+		    const draftToSave = draftRef.current;
+		    const savingSignature = draftSignature(draftToSave);
+		    const savingRevision = baselineRevisionRef.current;
 		    setStatus("saving");
 		    try {
-		      await controller.save(route, model.id, mode, efforts);
+		      const nextSnapshot = await controller.save(route, model.id, draftToSave.mode, draftToSave.efforts, savingRevision);
+		      if (draftSignature(draftRef.current) === savingSignature) {
+		        const savedModel = nextSnapshot.providers[route]?.models?.find((entry) => entry.id === model.id) ?? model;
+		        applyReconciledState(reloadDraft({ remoteModel: savedModel, remoteRevision: nextSnapshot.revision }));
+		      }
 		      setStatus("saved");
 		    } catch (error) {
 		      setStatus(error instanceof Error ? error.message : String(error));
 		    }
 		  };
 		  const modelName = model.name || model.id;
-		  const selectedCount = Object.keys(efforts).length;
-		  const customBodyId = `dsh-reasoning-custom-${route}-${model.id}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+		  const selectedCount = Object.keys(draft.efforts).length;
+		  const customBodyId = ("dsh-reasoning-custom-" + route + "-" + model.id).replace(/[^a-zA-Z0-9_-]/g, "-");
+		  const statusClass = status === "saving" ? "dsh-reasoning-status dsh-reasoning-status--saving" : status === "saved" ? "dsh-reasoning-status dsh-reasoning-status--success" : status ? "dsh-reasoning-status dsh-reasoning-status--error" : "dsh-reasoning-status";
 		  return h(
 		    "article",
 		    { className: "dsh-reasoning-model" },
@@ -372,41 +455,41 @@ window.__ModuleLoader__.load({
 		        h("span", { className: "dsh-reasoning-model__mode-label" }, "\u63A8\u7406\u6A21\u5F0F"),
 		        h(
 		          "div",
-		          { className: "dsh-reasoning-mode", role: "group", "aria-label": `${model.id} \u63A8\u7406\u6A21\u5F0F` },
+		          { className: "dsh-reasoning-mode", role: "group", "aria-label": model.id + " \u63A8\u7406\u6A21\u5F0F" },
 		          h("button", {
 		            type: "button",
-		            className: mode === "disabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
-		            "aria-pressed": mode === "disabled",
+		            className: draft.mode === "disabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
+		            "aria-pressed": draft.mode === "disabled",
 		            disabled: !writable,
 		            onClick: () => setMode("disabled")
 		          }, "\u5173\u95ED"),
 		          h("button", {
 		            type: "button",
-		            className: mode === "enabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
-		            "aria-pressed": mode === "enabled",
+		            className: draft.mode === "enabled" ? "dsh-reasoning-mode__option dsh-reasoning-mode__option--active" : "dsh-reasoning-mode__option",
+		            "aria-pressed": draft.mode === "enabled",
 		            disabled: !writable,
 		            onClick: () => setMode("enabled")
 		          }, "\u542F\u7528")
 		        )
 		      )
 		    ),
-		    mode === "enabled" && h(
+		    draft.mode === "enabled" && h(
 		      "div",
 		      { className: "dsh-reasoning-model__body" },
 		      h(
 		        "div",
-		        { className: "dsh-reasoning-levels", "aria-label": `${model.id} \u53EF\u7528\u63A8\u7406\u7B49\u7EA7` },
+		        { className: "dsh-reasoning-levels", "aria-label": model.id + " \u53EF\u7528\u63A8\u7406\u7B49\u7EA7" },
 		        h(
 		          "div",
 		          { className: "dsh-reasoning-levels__heading" },
 		          h("span", { className: "dsh-reasoning-levels__label" }, "\u53EF\u7528\u7B49\u7EA7"),
-		          h("span", { className: "dsh-reasoning-levels__summary" }, `\u5DF2\u9009 ${selectedCount} \u9879`)
+		          h("span", { className: "dsh-reasoning-levels__summary" }, "\u5DF2\u9009 " + selectedCount + " \u9879")
 		        ),
 		        h(
 		          "div",
 		          { className: "dsh-reasoning-levels__options" },
 		          ...LEVELS.map((level) => {
-		            const checked = Object.hasOwn(efforts, level);
+		            const checked = Object.hasOwn(draft.efforts, level);
 		            return h(
 		              "label",
 		              { key: level, className: "dsh-reasoning-level" + (checked ? " dsh-reasoning-level--active" : "") },
@@ -439,17 +522,17 @@ window.__ModuleLoader__.load({
 		        customOpen && h(
 		          "div",
 		          { id: customBodyId, className: "dsh-reasoning-custom__body" },
-		          ...LEVELS.filter((level) => Object.hasOwn(efforts, level)).map((level) => h(
+		          ...LEVELS.filter((level) => Object.hasOwn(draft.efforts, level)).map((level) => h(
 		            "label",
 		            { key: level, className: "dsh-reasoning-custom__field" },
 		            h("span", null, level === "off" ? "off" : level),
 		            h("input", {
 		              type: "text",
-		              value: efforts[level] ?? "",
+		              value: draft.efforts[level] ?? "",
 		              placeholder: level === "off" ? "\u7559\u7A7A\u8868\u793A null" : level,
 		              disabled: !writable,
-		              onChange: (event) => setEfforts((current) => ({ ...current, [level]: event.target.value })),
-		              "aria-label": `${model.id} ${level} wire \u503C`
+		              onChange: (event) => setDraft((current) => ({ ...current, efforts: { ...current.efforts, [level]: event.target.value } })),
+		              "aria-label": model.id + " " + level + " wire \u503C"
 		            })
 		          ))
 		        )
@@ -458,12 +541,14 @@ window.__ModuleLoader__.load({
 		    h(
 		      "footer",
 		      { className: "dsh-reasoning-model__footer" },
-		      status && status !== "saving" && h("span", { role: "status", className: status === "saved" ? "dsh-reasoning-status dsh-reasoning-status--success" : "dsh-reasoning-status dsh-reasoning-status--error" }, displayStatus(status)),
+		      h("span", { className: "dsh-reasoning-remote-status", hidden: !remoteChanged }, "\u8FDC\u7AEF\u5DF2\u66F4\u65B0"),
+		      remoteChanged && h("button", { className: "dsh-reasoning-reload", type: "button", onClick: reload }, "\u91CD\u65B0\u8F7D\u5165"),
+		      h("span", { role: "status", "aria-live": "polite", className: statusClass }, displayStatus(status)),
 		      h("button", { className: "dsh-reasoning-save", type: "button", disabled: !writable || status === "saving", onClick: save }, status === "saving" ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58")
 		    )
 		  );
 		}
-		function renderProvider([route, provider], controller, writable) {
+		function renderProvider([route, provider], controller, writable, revision) {
 		  return h(
 		    "section",
 		    { key: route, className: "dsh-reasoning-provider" },
@@ -471,7 +556,7 @@ window.__ModuleLoader__.load({
 		      "div",
 		      { className: "dsh-reasoning-provider__header" },
 		      h("h3", null, route),
-		      h("span", null, `${provider.models.length} \u4E2A\u6A21\u578B`)
+		      h("span", null, provider.models.length + " \u4E2A\u6A21\u578B")
 		    ),
 		    h(
 		      "div",
@@ -481,7 +566,8 @@ window.__ModuleLoader__.load({
 		        route,
 		        model,
 		        controller,
-		        writable
+		        writable,
+		        revision
 		      }))
 		    )
 		  );
@@ -503,7 +589,7 @@ window.__ModuleLoader__.load({
 		      h("h2", null, "\u6A21\u578B\u63A8\u7406"),
 		      h("p", null, "\u4E3A\u81EA\u5B9A\u4E49 provider \u7684\u6BCF\u4E2A\u6A21\u578B\u8BBE\u7F6E\u63A8\u7406\u7B49\u7EA7\u3002")
 		    ),
-		    providers.length === 0 ? h("p", null, "\u6682\u65E0\u81EA\u5B9A\u4E49 provider \u6A21\u578B\u3002") : providers.map((entry) => renderProvider(entry, controller, snapshot.writable))
+		    providers.length === 0 ? h("p", null, "\u6682\u65E0\u81EA\u5B9A\u4E49 provider \u6A21\u578B\u3002") : providers.map((entry) => renderProvider(entry, controller, snapshot.writable, snapshot.revision))
 		  );
 		}
 
@@ -668,7 +754,7 @@ window.__ModuleLoader__.load({
 		.dsh-reasoning-save:hover:not(:disabled),.dsh-ccswitch-import__primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);}
 		.dsh-reasoning-save:disabled,.dsh-ccswitch-import__primary:disabled,.dsh-ccswitch-import__secondary:disabled,.dsh-reasoning-mode__option:disabled{opacity:.4;cursor:default;}
 		.dsh-reasoning-save:focus-visible,.dsh-ccswitch-import__primary:focus-visible,.dsh-ccswitch-import__secondary:focus-visible,.dsh-reasoning-mode__option:focus-visible,.dsh-reasoning-custom__toggle:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
-		.dsh-reasoning-status{display:inline-flex;align-items:center;min-width:0;max-width:100%;min-height:20px;box-sizing:border-box;padding:1px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;font-size:11px;font-weight:500;line-height:18px;white-space:nowrap;}
+		.dsh-reasoning-status{display:inline-flex;align-items:center;min-width:0;max-width:100%;min-height:20px;box-sizing:border-box;padding:1px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;font-size:11px;font-weight:500;line-height:18px;white-space:nowrap;}.dsh-reasoning-status:empty{display:none;}.dsh-reasoning-status--saving{color:var(--dsw-alias-label-secondary);border-color:var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);}.dsh-reasoning-reload{min-height:28px;padding:4px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;}.dsh-reasoning-reload:hover{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-primary);}.dsh-reasoning-reload:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:1px;}
 		.dsh-reasoning-status--success{color:var(--dsw-alias-state-success-primary);}
 		.dsh-reasoning-status--error{max-width:240px;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;white-space:normal;}
 		.dsh-reasoning-model__body{min-width:0;padding:12px;border-top:1px solid var(--dsw-alias-border-l2);}
