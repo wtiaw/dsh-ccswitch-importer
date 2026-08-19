@@ -20,7 +20,7 @@ export function reconcileDraft({ draft, baseline, baselineRevision, remoteModel,
   const baselineSignature = draftSignature(baseline)
   const draftIsClean = draftSignature(draft) === baselineSignature
   if (remoteSignature === baselineSignature) {
-    return { draft, baseline, baselineRevision: remoteRevision, remoteChanged }
+    return { draft, baseline, baselineRevision: remoteRevision, remoteChanged: false }
   }
   if (draftIsClean) {
     return { draft: remoteDraft, baseline: remoteDraft, baselineRevision: remoteRevision, remoteChanged: false }

@@ -41,6 +41,21 @@ test('dirty draft is preserved while changed remote data is recorded', () => {
   assert.equal(result.remoteChanged, true)
 })
 
+test('remote notice clears when the remote model returns to the baseline', () => {
+  const baseline = draftForModel({ id: 'gpt-5.6', reasoningEfforts: { low: 'low' } })
+  const draft = { mode: 'enabled', efforts: { low: 'custom-low' } }
+  const result = reconcileDraft({
+    draft,
+    baseline,
+    baselineRevision: 3,
+    remoteModel: { id: 'gpt-5.6', reasoningEfforts: { low: 'low' } },
+    remoteRevision: 5,
+    remoteChanged: true,
+  })
+  assert.equal(result.remoteChanged, false)
+  assert.equal(result.baselineRevision, 5)
+})
+
 test('draft signatures ignore effort object insertion order', () => {
   assert.equal(
     draftSignature({ mode: 'enabled', efforts: { high: 'high', low: 'low' } }),
