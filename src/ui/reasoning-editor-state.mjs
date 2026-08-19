@@ -28,6 +28,11 @@ export function reconcileDraft({ draft, baseline, baselineRevision, remoteModel,
   return { draft, baseline, baselineRevision, remoteChanged: true }
 }
 
+export function rebaseDraft({ draft, savedModel, savedRevision }) {
+  const baseline = draftForModel(savedModel)
+  return { draft, baseline, baselineRevision: savedRevision, remoteChanged: false }
+}
+
 export function reloadDraft({ remoteModel, remoteRevision }) {
   const next = draftForModel(remoteModel)
   return { draft: next, baseline: next, baselineRevision: remoteRevision, remoteChanged: false }

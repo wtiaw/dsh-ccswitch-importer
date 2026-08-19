@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { LEVELS } from "../domain/validation.mjs";
-import { draftForModel, draftSignature, reconcileDraft, reloadDraft } from "./reasoning-editor-state.mjs";
+import { draftForModel, draftSignature, reconcileDraft, rebaseDraft, reloadDraft } from "./reasoning-editor-state.mjs";
 
 const h = React.createElement;
 
@@ -22,6 +22,7 @@ function ModelEditor({ route, model, controller, writable, revision }) {
   const baselineRef = useRef(baseline);
   const baselineRevisionRef = useRef(baselineRevision);
   const remoteChangedRef = useRef(remoteChanged);
+  const saveInFlightRef = useRef(false);
   draftRef.current = draft;
   baselineRef.current = baseline;
   baselineRevisionRef.current = baselineRevision;
@@ -78,19 +79,25 @@ function ModelEditor({ route, model, controller, writable, revision }) {
   };
 
   const save = async () => {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     const draftToSave = draftRef.current;
     const savingSignature = draftSignature(draftToSave);
     const savingRevision = baselineRevisionRef.current;
     setStatus("saving");
     try {
       const nextSnapshot = await controller.save(route, model.id, draftToSave.mode, draftToSave.efforts, savingRevision);
+      const savedModel = nextSnapshot.providers[route]?.models?.find((entry) => entry.id === model.id) ?? model;
       if (draftSignature(draftRef.current) === savingSignature) {
-        const savedModel = nextSnapshot.providers[route]?.models?.find((entry) => entry.id === model.id) ?? model;
         applyReconciledState(reloadDraft({ remoteModel: savedModel, remoteRevision: nextSnapshot.revision }));
+      } else {
+        applyReconciledState(rebaseDraft({ draft: draftRef.current, savedModel, savedRevision: nextSnapshot.revision }));
       }
       setStatus("saved");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      saveInFlightRef.current = false;
     }
   };
 
@@ -176,7 +183,7 @@ function ModelEditor({ route, model, controller, writable, revision }) {
       ),
     ),
     h("footer", { className: "dsh-reasoning-model__footer" },
-      h("span", { className: "dsh-reasoning-remote-status", hidden: !remoteChanged }, "远端已更新"),
+      h("span", { className: "dsh-reasoning-remote-status", role: "status", "aria-live": "polite" }, remoteChanged ? "远端已更新" : ""),
       remoteChanged && h("button", { className: "dsh-reasoning-reload", type: "button", onClick: reload }, "重新载入"),
       h("span", { role: "status", "aria-live": "polite", className: statusClass }, displayStatus(status)),
       h("button", { className: "dsh-reasoning-save", type: "button", disabled: !writable || status === "saving", onClick: save }, status === "saving" ? "保存中…" : "保存"),

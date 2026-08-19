@@ -5,6 +5,7 @@ import {
   draftSignature,
   reconcileDraft,
   reloadDraft,
+  rebaseDraft,
 } from '../src/ui/reasoning-editor-state.mjs'
 
 test('clean draft adopts a changed remote model and revision', () => {
@@ -61,6 +62,20 @@ test('draft signatures ignore effort object insertion order', () => {
     draftSignature({ mode: 'enabled', efforts: { high: 'high', low: 'low' } }),
     draftSignature({ mode: 'enabled', efforts: { low: 'low', high: 'high' } }),
   )
+})
+
+test('rebase keeps edits made while saving and advances the baseline revision', () => {
+  const saved = draftForModel({ id: 'gpt-5.6', reasoningEfforts: { low: 'saved-low' } })
+  const editingDraft = { mode: 'enabled', efforts: { low: 'new-local-edit' } }
+  const result = rebaseDraft({
+    draft: editingDraft,
+    savedModel: { id: 'gpt-5.6', reasoningEfforts: { low: 'saved-low' } },
+    savedRevision: 9,
+  })
+  assert.deepEqual(result.draft, editingDraft)
+  assert.deepEqual(result.baseline, saved)
+  assert.equal(result.baselineRevision, 9)
+  assert.equal(result.remoteChanged, false)
 })
 
 test('reload explicitly adopts the recorded remote model', () => {
