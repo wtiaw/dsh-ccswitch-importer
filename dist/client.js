@@ -305,15 +305,26 @@ window.__ModuleLoader__.load({
 		    if (result?.catch) void result.catch(() => {
 		    });
 		  };
+		  const listen = (event, handler) => {
+		    try {
+		      const dispose = ctx.remote.$on(event, handler);
+		      return typeof dispose === "function" ? dispose : () => {
+		      };
+		    } catch {
+		      return () => {
+		      };
+		    }
+		  };
 		  const disposers = [
-		    ctx.remote.$on("settings/document-updated", () => {
+		    listen("settings/document-updated", () => {
 		      void controller.refresh();
 		    }),
-		    ctx.remote.$on("llm/adapters-updated", () => {
+		    listen("llm/adapters-updated", () => {
 		      void controller.refresh();
 		    }),
-		    ctx.remote.$on("credentials/updated", refreshImporter),
-		    ctx.remote.$on("connection/reset", () => {
+		    listen("credentials/updated", refreshImporter),
+		    listen("credentials/reference-updated", refreshImporter),
+		    listen("connection/reset", () => {
 		      void controller.refresh();
 		    })
 		  ];

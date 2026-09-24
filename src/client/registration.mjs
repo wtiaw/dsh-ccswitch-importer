@@ -27,11 +27,20 @@ export function registerReasoningSettings(ctx, { controller, importer, component
     const result = importer?.scan?.();
     if (result?.catch) void result.catch(() => {});
   };
+  const listen = (event, handler) => {
+    try {
+      const dispose = ctx.remote.$on(event, handler);
+      return typeof dispose === "function" ? dispose : () => {};
+    } catch {
+      return () => {};
+    }
+  };
   const disposers = [
-    ctx.remote.$on("settings/document-updated", () => { void controller.refresh(); }),
-    ctx.remote.$on("llm/adapters-updated", () => { void controller.refresh(); }),
-    ctx.remote.$on("credentials/updated", refreshImporter),
-    ctx.remote.$on("connection/reset", () => { void controller.refresh(); }),
+    listen("settings/document-updated", () => { void controller.refresh(); }),
+    listen("llm/adapters-updated", () => { void controller.refresh(); }),
+    listen("credentials/updated", refreshImporter),
+    listen("credentials/reference-updated", refreshImporter),
+    listen("connection/reset", () => { void controller.refresh(); }),
   ];
   return () => disposers.forEach((dispose) => dispose());
 }
